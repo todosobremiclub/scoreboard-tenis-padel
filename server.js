@@ -22,6 +22,13 @@ const io = new Server(server, {
 app.use(express.json());
 app.use(express.static('public'));
 
+
+// Ruta raíz: redirige al Admin
+app.get('/', (_req, res) => {
+  res.redirect('/admin.html');
+});
+
+
 const PORT = process.env.PORT || 3000;
 
 /* =========================================================

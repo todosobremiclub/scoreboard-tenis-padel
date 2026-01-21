@@ -1,0 +1,265 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Administrador del Partido</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+  <link rel="stylesheet" href="/style.css">
+
+  <!-- Estilos mínimos extra para tabs/badges -->
+  <style>
+    .tabs {
+      display: flex; gap: 8px; margin: 8px 0 12px;
+      flex-wrap: wrap;
+    }
+    .tab {
+      padding: 8px 12px; border-radius: 4px; cursor: pointer;
+      background: #0f4b38; border: 2px solid #093628; color: #f1f1f1;
+      font-weight: 700;
+    }
+    .tab.active { background: #1a5c45; }
+    .filterbar {
+      display: grid;
+      grid-template-columns: 1fr 220px 220px auto;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .filterbar input, .filterbar select {
+      padding: 8px; background: #0f4b38; color: #f1f1f1; border: 1px solid #093628;
+    }
+    .list { display: grid; gap: 10px; }
+    .badge {
+      display: inline-block; padding: 2px 8px; font-size: 12px; border-radius: 100px;
+      background: #0f4b38; border: 1px solid #093628; color: #e1d36e; margin-right: 6px;
+    }
+    .muted { color: #cfd8d3; font-size: 13px; }
+    .wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+    .match-title {
+      font-size: 20px; font-weight: 800; margin: 2px 0;
+    }
+    .teams-line { font-size: 16px; }
+    .actions .btn {
+      background: #1a5c45; color: #fff; border: 1px solid #093628;
+      padding: 8px 10px; border-radius: 4px; cursor: pointer;
+      font-weight: 700;
+    }
+    .actions .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .right { margin-left: auto; }
+    @media (max-width: 900px){
+      .filterbar { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Administrador del Partido</h1>
+
+    <!-- Crear partido -->
+    <section class="form">
+      <h2>Crear partido</h2>
+      <div class="grid-2">
+        <div>
+          <label>Nombre del partido</label>
+          <input id="matchName" type="text" value="Partido de prueba">
+        </div>
+
+        <div>
+          <label>Instancia del partido</label>
+          <select id="matchStage">
+            <option value="Amistoso" selected>Amistoso</option>
+            <option value="Fase de grupos">Fase de grupos</option>
+            <option value="32vos de final">32vos de final</option>
+            <option value="16vos de final">16vos de final</option>
+            <option value="8vos de final">8vos de final</option>
+            <option value="4tos de final">4tos de final</option>
+            <option value="Semi-Final">Semi-Final</option>
+            <option value="Final">Final</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Jugador/Equipo A</label>
+          <input id="teamA" type="text" value="Equipo A">
+        </div>
+        <div>
+          <label>Jugador/Equipo B</label>
+          <input id="teamB" type="text" value="Equipo B">
+        </div>
+
+        <div>
+          <label>Saca primero</label>
+          <select id="firstServer">
+            <option value="A" selected>Equipo A</option>
+            <option value="B">Equipo B</option>
+          </select>
+        </div>
+        <div>
+          <label>Mejor de (sets)</label>
+          <select id="bestOf">
+            <option value="1">1</option>
+            <option value="3" selected>3</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Tie-break</label>
+          <select id="tieBreakAt">
+            <option value="6-6" selected>En 6-6</option>
+            <option value="5-5">En 5-5 (short set)</option>
+            <option value="none">Sin tie-break</option>
+          </select>
+        </div>
+        <div>
+          <label>Punto de oro (sin ventajas)</label>
+          <select id="noAdvantage">
+            <option value="false" selected>No</option>
+            <option value="true">Sí</option>
+          </select>
+        </div>
+
+        <!-- NUEVO: Cancha -->
+        <div>
+          <label>Cancha</label>
+          <input id="courtName" type="text" placeholder="Cancha 1">
+        </div>
+      </div>
+
+      <div style="margin-top:12px;" class="wrap">
+        <button id="createBtn">Crear partido</button>
+        <div id="tvUrlWrap" style="display:none;">
+          <div><strong>URL para la TV:</strong> <span id="tvUrl"></span></div>
+          <small class="muted">Abrí esta URL en la pantalla (Smart TV/Chromecast/PC).</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel de administración de múltiples partidos -->
+    <section class="controls">
+      <h2>Partidos</h2>
+
+      <!-- Pestañas -->
+      <div class="tabs" id="tabs">
+        <div class="tab active" data-tab="active">Activos</div>
+        <div class="tab" data-tab="history">Histórico</div>
+      </div>
+
+      <!-- Filtros / búsqueda / ordenar -->
+      <div class="filterbar">
+        <input id="searchQ" type="search" placeholder="Buscar por partido o equipos..." />
+        <select id="filterStage">
+          <option value="">Todas las instancias</option>
+        </select>
+        <select id="sortBy">
+          <option value="-createdAt" selected>Más recientes</option>
+          <option value="name">Nombre (A-Z)</option>
+          <option value="-updatedAt">Última actualización</option>
+          <option value="-endedAt">Finalizados (más nuevos)</option>
+        </select>
+        <button id="refreshBtn">Refrescar</button>
+      </div>
+
+      <!-- Listas -->
+      <div id="activeList" class="list"></div>
+      <div id="historyList" class="list" style="display:none;"></div>
+    </section>
+  </div>
+
+  <!-- Template de ítem de partido -->
+  <template id="matchItemTemplate">
+    <div class="card match" data-id="">
+      <div class="row" style="justify-content: space-between; align-items: flex-start; gap: 12px;">
+        <div style="min-width: 260px;">
+          <div class="wrap">
+            <span class="badge stage">Amistoso</span>
+            <span class="badge status">scheduled</span>
+          </div>
+          <div class="match-title">Partido</div>
+          <div class="teams-line">Equipo A vs Equipo B</div>
+          <div class="muted meta">
+            Saca: <span class="serve">Equipo A</span> •
+            Cancha: <span class="court">—</span> •
+            Sets: <span class="sets">0-0</span> •
+            Games: <span class="games">0-0</span> •
+            Points: <span class="points">0-0</span>
+          </div>
+        </div>
+
+        <div class="right" style="text-align:right; min-width: 220px;">
+          <div class="muted">Cronómetro: <span class="elapsed">00:00:00</span></div>
+          <div class="muted">Estado: <span class="state">scheduled</span></div>
+          <div class="muted">ID: <span class="matchId">—</span></div>
+          <div class="muted">Actualizado: <span class="updatedAt">—</span></div>
+        </div>
+      </div>
+
+      <div class="actions wrap" style="margin-top:10px;">
+        <button class="btn btn-open">Abrir TV</button>
+        <button class="btn btn-start">Iniciar</button>
+        <button class="btn btn-pause">Pausar</button>
+        <button class="btn btn-resume">Reanudar</button>
+        <button class="btn btn-a">+1 A</button>
+        <button class="btn btn-b">+1 B</button>
+        <button class="btn btn-reset">Reset game</button>
+        <button class="btn btn-toggle-serve">Cambiar saque</button>
+        <button class="btn btn-finish">Finalizar</button>
+        <button class="btn btn-ads">Publicidad</button>
+        <button class="btn btn-edit">Editar</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- Modal simple para editar (nombre/equipos/instancia) -->
+  <div id="editModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 1000;">
+    <div class="card" style="width: min(560px, 92vw);">
+      <h3>Editar partido</h3>
+      <div class="grid-2">
+        <div>
+          <label>Nombre del partido</label>
+          <input id="editName" type="text">
+        </div>
+        <div>
+          <label>Instancia</label>
+          <select id="editStage"></select>
+        </div>
+        <div>
+          <label>Equipo A</label>
+          <input id="editTeamA" type="text">
+        </div>
+        <div>
+          <label>Equipo B</label>
+          <input id="editTeamB" type="text">
+        </div>
+        <div>
+          <label>Cancha</label>
+          <input id="editCourt" type="text">
+        </div>
+      </div>
+      <div class="wrap" style="margin-top: 12px;">
+        <button id="editSaveBtn">Guardar</button>
+        <button id="editCancelBtn" class="btn">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Publicidad -->
+  <div id="adsModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 1000;">
+    <div class="card" style="width: min(860px, 96vw);">
+      <h3>Publicidad del partido</h3>
+      <div class="wrap" style="align-items:center; gap:12px;">
+        <input id="adsFiles" type="file" accept="image/*" multiple>
+        <button id="adsUploadBtn">Subir imágenes</button>
+        <span class="muted">Formatos: JPG/PNG/WebP • Máx 10MB por imagen</span>
+      </div>
+      <div id="adsList" style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;"></div>
+      <div class="wrap" style="margin-top: 12px;">
+        <button id="adsCloseBtn" class="btn">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>

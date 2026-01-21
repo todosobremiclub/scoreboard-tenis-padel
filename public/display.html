@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pantalla del Partido</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <!-- CARGA CORRECTA DE CSS -->
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="tv-wrapper rg-board">
+    <!-- Barra superior -->
+    <div class="rg-topbar">
+      <!-- Izquierda: Hora y Cronómetro -->
+      <div class="rg-timebox">
+        <div class="rg-clock" id="clock">--:--</div>
+        <div class="rg-elapsed" id="elapsed">00:00:00</div>
+      </div>
+
+      <!-- Centro: Título arriba, Instancia abajo -->
+      <div class="rg-center-meta">
+        <div class="rg-title" id="matchTitle">Partido</div>
+        <div class="rg-stage" id="matchStage">Amistoso</div>
+      </div>
+
+      <!-- Derecha: Cancha -->
+      <div class="rg-court" id="matchCourt">Cancha —</div>
+    </div>
+
+    <!-- Marcador principal estilo torneo -->
+    <div class="rg-scorecard">
+      <!-- Fila Jugador/Equipo A -->
+      <div class="rg-row" id="rowA">
+        <div class="rg-player">
+          <span class="serve-dot" id="serveA" aria-label="Saca A"></span>
+          <div class="rg-name">
+            <span id="nameA_first" class="first">Equipo</span>
+            <span id="nameA_last" class="last">A</span>
+          </div>
+        </div>
+
+        <!-- Sets previos + set en juego -->
+        <div class="rg-sets" id="setsRowA">
+          <!-- celdas de sets inyectadas por JS -->
+        </div>
+
+        <!-- Puntos del game actual -->
+        <div class="rg-points" id="pointsA">0</div>
+      </div>
+
+      <!-- Fila Jugador/Equipo B -->
+      <div class="rg-row" id="rowB">
+        <div class="rg-player">
+          <span class="serve-dot" id="serveB" aria-label="Saca B"></span>
+          <div class="rg-name">
+            <span id="nameB_first" class="first">Equipo</span>
+            <span id="nameB_last" class="last">B</span>
+          </div>
+        </div>
+
+        <!-- Sets previos + set en juego -->
+        <div class="rg-sets" id="setsRowB">
+          <!-- celdas de sets inyectadas por JS -->
+        </div>
+
+        <!-- Puntos del game actual -->
+        <div class="rg-points" id="pointsB">0</div>
+      </div>
+    </div>
+
+    <!-- Carrusel de Publicidades -->
+    <div class="ads-container" id="adsContainer" aria-label="Publicidad (rotación)">
+      <!-- Slides se inyectan por JS -->
+      <div class="ads-dots" id="adsDots"></div>
+    </div>
+  </div>
+
+  <!-- CARGA CORRECTA DE SCRIPTS -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/display.js"></script>
+</body>
+</html>
+
+

@@ -1,0 +1,15 @@
+{
+  "name": "scoreboard-tenis-padel",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.1",
+    "multer": "^2.0.2",
+    "socket.io": "^4.8.3"
+  }
+}

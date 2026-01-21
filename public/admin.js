@@ -1,0 +1,616 @@
+
+// public/admin.js
+
+/* ==============================
+   Helpers
+============================== */
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+const originBase = window.location.origin;
+
+function two(n){ return String(n).padStart(2,'0'); }
+function formatDateTime(ms){
+  if (!ms) return '—';
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = two(d.getMonth()+1);
+  const day = two(d.getDate());
+  const hh = two(d.getHours());
+  const mm = two(d.getMinutes());
+  const ss = two(d.getSeconds());
+  return `${day}/${m}/${y} ${hh}:${mm}:${ss}`;
+}
+function formatHMS(ms){
+  const sec = Math.max(0, Math.floor(ms/1000));
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  const s = sec%60;
+  return `${two(h)}:${two(m)}:${two(s)}`;
+}
+function computeElapsed(state, now = Date.now()){
+  // acumulado + (si está corriendo) tramo actual
+  let elapsed = state.accumulatedMs || 0;
+  if (state.running) {
+    const refStart = state.startedAt ?? now;
+    elapsed += (now - refStart);
+  }
+  return elapsed;
+}
+function mapPointsDisplay(match){
+  const set = match.sets[match.sets.length - 1];
+  const tb = set?.tieBreak || {active:false};
+  if (tb.active) {
+    return `${tb.pointsA ?? 0}-${tb.pointsB ?? 0}`;
+  }
+  const g = match.currentGame || {pointsA:0, pointsB:0, advantage:null};
+  const toStr = (p) => ['0','15','30','40'][Math.min(p,3)] || '0';
+  if (!match.rules?.noAdvantage) {
+    // Con ventaja
+    if (g.pointsA === 3 && g.pointsB === 3) {
+      if (g.advantage === 'A') return 'V-40';
+      if (g.advantage === 'B') return '40-V';
+      return '40-40';
+    }
+  }
+  // Sin ventaja (punto de oro) u otros estados
+  return `${toStr(g.pointsA||0)}-${toStr(g.pointsB||0)}`;
+}
+
+/* ==============================
+   State global
+============================== */
+const state = {
+  stages: [
+    // fallback; se sobreescribe desde /api/meta/stages
+    'Amistoso','Fase de grupos','32vos de final','16vos de final',
+    '8vos de final','4tos de final','Semi-Final','Final'
+  ],
+  tab: 'active', // 'active' | 'history'
+  filters: {
+    q: '',
+    stage: '',
+    sort: '-createdAt'
+  },
+  // Diccionario de matchId -> último state recibido
+  byId: new Map(),
+  // Diccionario de matchId -> elemento DOM (tarjeta)
+  elements: new Map(),
+  // Socket único para unir múltiples salas
+  socket: null,
+  // Timer de cronómetros
+  tickTimer: null
+};
+
+/* ==============================
+   API wrappers
+============================== */
+async function apiGet(url){
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+async function apiPost(url, body){
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+async function apiPatch(url, body){
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+/* ==============================
+   Socket.IO (un solo socket; múltiples salas)
+============================== */
+function ensureSocket(){
+  if (state.socket) return state.socket;
+
+  const socket = io(originBase, { transports: ['websocket'] });
+  socket.on('connect', () => {
+    // Reunirnos a todas las salas activas (por si recargamos)
+    const ids = Array.from(state.byId.keys());
+    ids.forEach(id => socket.emit('join', id));
+  });
+  socket.on('state', (match) => {
+    // Actualización puntual de un match
+    state.byId.set(match.id, match);
+    updateMatchCard(match.id);
+  });
+  socket.on('finished', (_payload) => {
+    // Cuando un match finaliza, refrescamos listas (mueve a histórico)
+    // Para evitar demasiadas llamadas, hacemos un refresh suave
+    refreshLists();
+  });
+
+  state.socket = socket;
+  return socket;
+}
+function joinRoom(matchId){
+  ensureSocket().emit('join', matchId);
+}
+
+/* ==============================
+   Renderizado de listas y tarjetas
+============================== */
+function clearContainer(el){
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function fillStagesSelect(selectEl, withAllOption=false){
+  if (withAllOption) {
+    // Mantener la primera opción "Todas las instancias"
+    const keepFirst = selectEl.querySelector('option[value=""]');
+    selectEl.innerHTML = '';
+    if (keepFirst) selectEl.appendChild(keepFirst);
+  } else {
+    selectEl.innerHTML = '';
+  }
+  state.stages.forEach(st => {
+    const opt = document.createElement('option');
+    opt.value = st;
+    opt.textContent = st;
+    selectEl.appendChild(opt);
+  });
+}
+
+function buildQuery(base, { status, stage, q, sort }){
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (stage) params.set('stage', stage);
+  if (q) params.set('q', q);
+  if (sort) params.set('sort', sort);
+  return `${base}?${params.toString()}`;
+}
+
+function renderLists(activeData, historyData){
+  const activeList = $('#activeList');
+  const historyList = $('#historyList');
+  clearContainer(activeList);
+  clearContainer(historyList);
+
+  // Render Activos
+  (activeData?.active || []).forEach(m => {
+    const el = renderMatchItem(m, /*isHistory*/false);
+    activeList.appendChild(el);
+  });
+
+  // Render Histórico
+  (historyData?.finished || []).forEach(m => {
+    const el = renderMatchItem(m, /*isHistory*/true);
+    historyList.appendChild(el);
+  });
+
+  // Después de poblar listas, unir salas activas
+  (activeData?.active || []).forEach(m => joinRoom(m.id));
+
+  // Actualizar mapa de elementos (para updates puntuales)
+  state.elements.clear();
+  $$('#activeList .match, #historyList .match').forEach(card => {
+    const id = card.dataset.id;
+    state.elements.set(id, card);
+  });
+}
+
+function renderMatchItem(match, isHistory){
+  // Guardar el último estado
+  state.byId.set(match.id, match);
+
+  const tpl = $('#matchItemTemplate');
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  node.dataset.id = match.id;
+
+  // Referencias
+  const badgeStage = node.querySelector('.badge.stage');
+  const badgeStatus = node.querySelector('.badge.status');
+  const title = node.querySelector('.match-title');
+  const teamsLine = node.querySelector('.teams-line');
+  const metaServe = node.querySelector('.meta .serve');
+  const metaSets = node.querySelector('.meta .sets');
+  const metaGames = node.querySelector('.meta .games');
+  const metaPoints = node.querySelector('.meta .points');
+
+  const elapsedEl = node.querySelector('.elapsed');
+  const stateEl = node.querySelector('.state');
+  const idEl = node.querySelector('.matchId');
+  const updatedEl = node.querySelector('.updatedAt');
+
+  // Botones
+  const btnOpen = node.querySelector('.btn-open');
+  const btnStart = node.querySelector('.btn-start');
+  const btnPause = node.querySelector('.btn-pause');
+  const btnResume = node.querySelector('.btn-resume');
+  const btnA = node.querySelector('.btn-a');
+  const btnB = node.querySelector('.btn-b');
+  const btnReset = node.querySelector('.btn-reset');
+  const btnToggle = node.querySelector('.btn-toggle-serve');
+  const btnFinish = node.querySelector('.btn-finish');
+  const btnEdit = node.querySelector('.btn-edit');
+
+  // Contenido
+  badgeStage.textContent = match.stage || 'Amistoso';
+  badgeStatus.textContent = match.status || 'scheduled';
+  title.textContent = match.name || 'Partido';
+  teamsLine.textContent = `${match.teams?.[0]?.name || 'Equipo A'} vs ${match.teams?.[1]?.name || 'Equipo B'}`;
+  metaServe.textContent = match.teams?.[match.serverIndex]?.name || '—';
+
+  const set = match.sets[match.sets.length - 1] || {gamesA:0, gamesB:0, tieBreak:{active:false}};
+  metaSets.textContent = `${match.setsWonA||0}-${match.setsWonB||0}`;
+  metaGames.textContent = `${set.gamesA||0}-${set.gamesB||0}`;
+  metaPoints.textContent = mapPointsDisplay(match);
+
+  elapsedEl.textContent = formatHMS(computeElapsed(match));
+  stateEl.textContent = match.status || (match.running ? 'running' : 'scheduled');
+  idEl.textContent = match.id;
+  updatedEl.textContent = formatDateTime(match.updatedAt);
+
+  // Estados de botones (habilitar/deshabilitar)
+  const finished = match.status === 'finished';
+  btnOpen.disabled = false;
+  btnStart.disabled = finished || match.running || match.status === 'running';
+  btnPause.disabled = finished || !match.running;
+  btnResume.disabled = finished || match.running || match.status === 'running';
+  btnA.disabled = finished;
+  btnB.disabled = finished;
+  btnReset.disabled = finished;
+  btnToggle.disabled = finished;
+  btnFinish.disabled = finished;
+  btnEdit.disabled = finished; // histórico no editable
+
+  if (isHistory) {
+    // En histórico, forzamos deshabilitados (salvo abrir TV)
+    btnStart.disabled = true;
+    btnPause.disabled = true;
+    btnResume.disabled = true;
+    btnA.disabled = true;
+    btnB.disabled = true;
+    btnReset.disabled = true;
+    btnToggle.disabled = true;
+    btnFinish.disabled = true;
+    btnEdit.disabled = true;
+  }
+
+  // Eventos
+  btnOpen.addEventListener('click', () => {
+    const url = `${originBase}/display.html?match=${match.id}`;
+    window.open(url, '_blank');
+  });
+  btnStart.addEventListener('click', async () => {
+    await apiPost(`/api/matches/${match.id}/start`);
+    softRefreshMatch(match.id);
+  });
+  btnPause.addEventListener('click', async () => {
+    await apiPost(`/api/matches/${match.id}/pause`);
+    softRefreshMatch(match.id);
+  });
+  btnResume.addEventListener('click', async () => {
+    await apiPost(`/api/matches/${match.id}/resume`);
+    softRefreshMatch(match.id);
+  });
+  btnA.addEventListener('click', async () => {
+    await apiPost(`/api/matches/${match.id}/point/A`);
+    // socket actualizará; por si acaso:
+    softRefreshMatch(match.id);
+  });
+  btnB.addEventListener('click', async () => {
+    await apiPost(`/api/matches/${match.id}/point/B`);
+    softRefreshMatch(match.id);
+  });
+  btnReset.addEventListener('click', async () => {
+    await apiPost(`/api/matches/${match.id}/reset-game`);
+    softRefreshMatch(match.id);
+  });
+  btnToggle.addEventListener('click', async () => {
+    await apiPost(`/api/matches/${match.id}/toggle-server`);
+    softRefreshMatch(match.id);
+  });
+  btnFinish.addEventListener('click', async () => {
+    if (!confirm('¿Finalizar el partido? Pasará al histórico.')) return;
+    await apiPost(`/api/matches/${match.id}/finish`);
+    await refreshLists();
+  });
+  btnEdit.addEventListener('click', () => openEditModal(match.id));
+
+  return node;
+}
+
+// Actualiza SOLO la tarjeta de un match ya renderizado
+function updateMatchCard(matchId){
+  const card = state.elements.get(matchId);
+  if (!card) return; // no visible en esta pestaña
+  const match = state.byId.get(matchId);
+  if (!match) return;
+
+  // Referencias dentro de la tarjeta
+  const badgeStatus = card.querySelector('.badge.status');
+  const title = card.querySelector('.match-title');
+  const teamsLine = card.querySelector('.teams-line');
+  const metaServe = card.querySelector('.meta .serve');
+  const metaSets = card.querySelector('.meta .sets');
+  const metaGames = card.querySelector('.meta .games');
+  const metaPoints = card.querySelector('.meta .points');
+
+  const elapsedEl = card.querySelector('.elapsed');
+  const stateEl = card.querySelector('.state');
+  const updatedEl = card.querySelector('.updatedAt');
+
+  // Actualizar textos
+  badgeStatus.textContent = match.status || (match.running ? 'running' : 'scheduled');
+  title.textContent = match.name || 'Partido';
+  teamsLine.textContent = `${match.teams?.[0]?.name || 'Equipo A'} vs ${match.teams?.[1]?.name || 'Equipo B'}`;
+  metaServe.textContent = match.teams?.[match.serverIndex]?.name || '—';
+
+  const set = match.sets[match.sets.length - 1] || {gamesA:0, gamesB:0, tieBreak:{active:false}};
+  metaSets.textContent = `${match.setsWonA||0}-${match.setsWonB||0}`;
+  metaGames.textContent = `${set.gamesA||0}-${set.gamesB||0}`;
+  metaPoints.textContent = mapPointsDisplay(match);
+
+  elapsedEl.textContent = formatHMS(computeElapsed(match));
+  stateEl.textContent = match.status || (match.running ? 'running' : 'scheduled');
+  updatedEl.textContent = formatDateTime(match.updatedAt);
+
+  // Estados de botones
+  const finished = match.status === 'finished';
+  const btnStart = card.querySelector('.btn-start');
+  const btnPause = card.querySelector('.btn-pause');
+  const btnResume = card.querySelector('.btn-resume');
+  const btnA = card.querySelector('.btn-a');
+  const btnB = card.querySelector('.btn-b');
+  const btnReset = card.querySelector('.btn-reset');
+  const btnToggle = card.querySelector('.btn-toggle-serve');
+  const btnFinish = card.querySelector('.btn-finish');
+  const btnEdit = card.querySelector('.btn-edit');
+
+  if (btnStart) btnStart.disabled = finished || match.running || match.status === 'running';
+  if (btnPause) btnPause.disabled = finished || !match.running;
+  if (btnResume) btnResume.disabled = finished || match.running || match.status === 'running';
+  if (btnA) btnA.disabled = finished;
+  if (btnB) btnB.disabled = finished;
+  if (btnReset) btnReset.disabled = finished;
+  if (btnToggle) btnToggle.disabled = finished;
+  if (btnFinish) btnFinish.disabled = finished;
+  if (btnEdit) btnEdit.disabled = finished;
+}
+
+/* ==============================
+   Carga de datos (listas, stages)
+============================== */
+async function loadStages(){
+  try {
+    const data = await apiGet('/api/meta/stages');
+    if (Array.isArray(data.stages) && data.stages.length) {
+      state.stages = data.stages;
+    }
+  } catch (e) {
+    console.warn('No se pudo cargar /api/meta/stages; uso fallback', e);
+  }
+  // Poblar selects
+  fillStagesSelect($('#matchStage')); // crear
+  fillStagesSelect($('#filterStage'), /*withAllOption*/true); // filtro (mantiene "todas")
+  // Para el modal de edición se llena on-demand
+}
+
+async function loadActive(){
+  const url = buildQuery('/api/matches', {
+    status: 'active',
+    stage: state.filters.stage,
+    q: state.filters.q,
+    sort: state.filters.sort
+  });
+  return apiGet(url);
+}
+async function loadHistory(){
+  const url = buildQuery('/api/matches', {
+    status: 'finished',
+    stage: state.filters.stage,
+    q: state.filters.q,
+    sort: state.filters.sort
+  });
+  return apiGet(url);
+}
+
+async function refreshLists(){
+  try {
+    const [activeData, historyData] = await Promise.all([
+      loadActive(),
+      loadHistory()
+    ]);
+    renderLists(activeData, historyData);
+  } catch (e) {
+    console.error('Error al refrescar listas', e);
+  }
+}
+
+async function softRefreshMatch(id){
+  // Obtener el estado por REST solo de ese id y refrescar tarjeta
+  try {
+    const data = await apiGet(`/api/matches/${id}`);
+    state.byId.set(id, data);
+    updateMatchCard(id);
+  } catch (e) {
+    console.warn('softRefreshMatch falló', e);
+  }
+}
+
+/* ==============================
+   Crear partido
+============================== */
+function showTvUrl(id){
+  const tvUrl = `${originBase}/display.html?match=${id}`;
+  $('#tvUrl').textContent = tvUrl;
+  $('#tvUrlWrap').style.display = 'block';
+}
+
+async function onCreateMatch(){
+  try {
+    const body = {
+      name: $('#matchName').value.trim() || 'Partido',
+      teamA: $('#teamA').value.trim() || 'Equipo A',
+      teamB: $('#teamB').value.trim() || 'Equipo B',
+      firstServer: $('#firstServer').value, // 'A' o 'B'
+      stage: $('#matchStage').value,
+      rules: {
+        bestOf: parseInt($('#bestOf').value, 10),
+        tieBreakAt: $('#tieBreakAt').value,
+        tieBreakPoints: 7,
+        noAdvantage: $('#noAdvantage').value === 'true'
+      }
+    };
+    const { id } = await apiPost('/api/matches', body);
+    if (id) {
+      showTvUrl(id);
+      // Actualizamos listas y nos unimos a la sala del match nuevo
+      await refreshLists();
+      joinRoom(id);
+    }
+  } catch (e) {
+    alert('No se pudo crear el partido. Revisá la consola.');
+    console.error(e);
+  }
+}
+
+/* ==============================
+   Tabs / Filtros / Búsqueda
+============================== */
+function setTab(tab){
+  state.tab = tab; // 'active' | 'history'
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  $('#activeList').style.display = tab === 'active' ? '' : 'none';
+  $('#historyList').style.display = tab === 'history' ? '' : 'none';
+}
+
+let searchDebounce = null;
+function onSearchInput(ev){
+  const q = ev.target.value || '';
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    state.filters.q = q.trim();
+    refreshLists();
+  }, 350);
+}
+function onFilterStage(ev){
+  state.filters.stage = ev.target.value || '';
+  refreshLists();
+}
+function onSortChange(ev){
+  state.filters.sort = ev.target.value || '-createdAt';
+  refreshLists();
+}
+
+/* ==============================
+   Editar partido (modal)
+============================== */
+const editModal = $('#editModal');
+let editingId = null;
+
+
+function openEditModal(matchId){
+  const m = state.byId.get(matchId);
+  if (!m) return;
+
+  editingId = matchId;
+
+  // Poblar campos
+  $('#editName').value = m.name || '';
+  $('#editTeamA').value = m.teams?.[0]?.name || '';
+  $('#editTeamB').value = m.teams?.[1]?.name || '';
+  $('#editCourt').value = m.courtName || '';   // ← AÑADIR ESTA LÍNEA
+
+  // Poblar instancias
+  const editStageSelect = $('#editStage');
+  if (!editStageSelect.options.length) fillStagesSelect(editStageSelect, false);
+  editStageSelect.value = m.stage || 'Amistoso';
+
+  editModal.style.display = 'flex';
+}
+
+function closeEditModal(){
+  editModal.style.display = 'none';
+  editingId = null;
+}
+
+
+async function onEditSave(){
+  if (!editingId) return;
+  try {
+    await apiPatch(`/api/matches/${editingId}`, {
+      name: $('#editName').value.trim(),
+      teamA: $('#editTeamA').value.trim(),
+      teamB: $('#editTeamB').value.trim(),
+      stage: $('#editStage').value,
+      courtName: $('#editCourt').value.trim()   // ← NUEVO
+    });
+    closeEditModal();
+    await refreshLists();
+  } catch (e) {
+    alert('No se pudo guardar. Revisá la consola.');
+    console.error(e);
+  }
+}
+
+/* ==============================
+   Tick de cronómetros en listado
+============================== */
+function startTicker(){
+  if (state.tickTimer) clearInterval(state.tickTimer);
+  state.tickTimer = setInterval(() => {
+    const now = Date.now();
+    // Actualizamos el cronómetro visible en las tarjetas renderizadas
+    state.elements.forEach((card, id) => {
+      const m = state.byId.get(id);
+      if (!m) return;
+      const el = card.querySelector('.elapsed');
+      if (!el) return;
+      el.textContent = formatHMS(computeElapsed(m, now));
+    });
+  }, 1000);
+}
+
+/* ==============================
+   Bootstrap
+============================== */
+function bindUI(){
+  // Tabs
+  $('#tabs').addEventListener('click', (ev) => {
+    const tab = ev.target.closest('.tab');
+    if (!tab) return;
+    setTab(tab.dataset.tab);
+  });
+
+  // Filtros
+  $('#searchQ').addEventListener('input', onSearchInput);
+  $('#filterStage').addEventListener('change', onFilterStage);
+  $('#sortBy').addEventListener('change', onSortChange);
+  $('#refreshBtn').addEventListener('click', refreshLists);
+
+  // Crear partido
+  $('#createBtn').addEventListener('click', onCreateMatch);
+
+  // Modal
+  $('#editSaveBtn').addEventListener('click', onEditSave);
+  $('#editCancelBtn').addEventListener('click', closeEditModal);
+
+  // Cerrar modal clickeando fuera
+  editModal.addEventListener('click', (ev) => {
+    if (ev.target === editModal) closeEditModal();
+  });
+}
+
+async function bootstrap(){
+  bindUI();
+  await loadStages();
+  await refreshLists();
+  setTab('active');
+  ensureSocket();
+  startTicker();
+}
+
+bootstrap();

@@ -449,6 +449,7 @@ function showTvUrl(id){
   $('#tvUrlWrap').style.display = 'block';
 }
 
+
 async function onCreateMatch(){
   try {
     const body = {
@@ -457,6 +458,7 @@ async function onCreateMatch(){
       teamB: $('#teamB').value.trim() || 'Equipo B',
       firstServer: $('#firstServer').value, // 'A' o 'B'
       stage: $('#matchStage').value,
+      courtName: $('#courtName').value.trim(), // ← IMPORTANTE: enviar la cancha
       rules: {
         bestOf: parseInt($('#bestOf').value, 10),
         tieBreakAt: $('#tieBreakAt').value,
@@ -464,6 +466,11 @@ async function onCreateMatch(){
         noAdvantage: $('#noAdvantage').value === 'true'
       }
     };
+
+    // (Opcional) logs de diagnóstico durante las pruebas
+    console.log('CLICK CREAR PARTIDO OK');
+    console.log('PAYLOAD CREATE', body);
+
     const { id } = await apiPost('/api/matches', body);
     if (id) {
       showTvUrl(id);

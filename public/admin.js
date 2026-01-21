@@ -81,6 +81,13 @@ const state = {
   tickTimer: null
 };
 
+
+// --- Publicidad (Ads) ---
+const adsModal = document.querySelector('#adsModal');
+const adsListEl = document.querySelector('#adsList');
+const adsFilesInput = document.querySelector('#adsFiles');
+let adsForId = null;
+
 /* ==============================
    API wrappers
 ============================== */
@@ -234,6 +241,10 @@ function renderMatchItem(match, isHistory){
   const btnToggle = node.querySelector('.btn-toggle-serve');
   const btnFinish = node.querySelector('.btn-finish');
   const btnEdit = node.querySelector('.btn-edit');
+  
+const btnAds = node.querySelector('.btn-ads');
+btnAds.addEventListener('click', () => openAdsModal(match.id));
+
 
   // Contenido
   badgeStage.textContent = match.stage || 'Amistoso';
@@ -605,6 +616,17 @@ function bindUI(){
   $('#editSaveBtn').addEventListener('click', onEditSave);
   $('#editCancelBtn').addEventListener('click', closeEditModal);
 
+  
+// Modal de Publicidad
+document.querySelector('#adsUploadBtn').addEventListener('click', uploadAdsForMatch);
+document.querySelector('#adsCloseBtn').addEventListener('click', closeAdsModal);
+
+// Cerrar adsModal clickeando el fondo
+adsModal.addEventListener('click', (ev) => {
+  if (ev.target === adsModal) closeAdsModal();
+});
+
+
   // Cerrar modal clickeando fuera
   editModal.addEventListener('click', (ev) => {
     if (ev.target === editModal) closeEditModal();
@@ -619,5 +641,124 @@ async function bootstrap(){
   ensureSocket();
   startTicker();
 }
+
+
+async function openAdsModal(matchId){
+  adsForId = matchId;
+  if (adsFilesInput) adsFilesInput.value = '';
+  await refreshAdsList();
+  adsModal.style.display = 'flex';
+}
+
+function closeAdsModal(){
+  adsModal.style.display = 'none';
+  adsForId = null;
+}
+
+async function refreshAdsList(){
+  if (!adsForId) return;
+  try {
+    const { urls } = await apiGet(`/api/matches/${adsForId}/ads`);
+    renderAdsGrid(urls || []);
+  } catch (e) {
+    console.error('No se pudo cargar publicidad', e);
+    renderAdsGrid([]);
+  }
+}
+
+function renderAdsGrid(urls){
+  adsListEl.innerHTML = '';
+  if (!urls.length) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'No hay imágenes cargadas aún.';
+    adsListEl.appendChild(empty);
+    return;
+  }
+  urls.forEach(url => {
+    const cell = document.createElement('div');
+    cell.style.background = '#0f4b38';
+    cell.style.border = '1px solid #093628';
+    cell.style.borderRadius = '6px';
+    cell.style.padding = '8px';
+    cell.style.display = 'flex';
+    cell.style.flexDirection = 'column';
+    cell.style.gap = '6px';
+
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = 'Publicidad';
+    img.style.width = '100%';
+    img.style.maxHeight = '120px';
+    img.style.objectFit = 'contain';
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.justifyContent = 'space-between';
+    row.style.alignItems = 'center';
+    row.style.gap = '8px';
+
+    const urlSmall = document.createElement('small');
+    urlSmall.className = 'muted';
+    urlSmall.style.display = 'inline-block';
+    urlSmall.style.maxWidth = '75%';
+    urlSmall.style.overflow = 'hidden';
+    urlSmall.style.textOverflow = 'ellipsis';
+    urlSmall.title = url;
+    urlSmall.textContent = url;
+
+    const del = document.createElement('button');
+    del.className = 'btn';
+    del.textContent = 'Eliminar';
+    del.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar esta imagen?')) return;
+      await apiDeleteAd(adsForId, url);
+      await refreshAdsList();
+    });
+
+    row.appendChild(urlSmall);
+    row.appendChild(del);
+    cell.appendChild(img);
+    cell.appendChild(row);
+    adsListEl.appendChild(cell);
+  });
+}
+
+async function uploadAdsForMatch(){
+  if (!adsForId) return;
+  const files = adsFilesInput.files;
+  if (!files || !files.length) {
+    alert('Seleccioná una o más imágenes.');
+    return;
+  }
+  const fd = new FormData();
+  Array.from(files).forEach(f => fd.append('files', f));
+  try {
+    const res = await fetch(`/api/matches/${adsForId}/ads`, {
+      method: 'POST',
+      body: fd
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(()=>'');
+      console.error('Upload error:', res.status, txt);
+      alert('No se pudieron subir las imágenes.');
+      return;
+    }
+    await refreshAdsList();
+    await softRefreshMatch(adsForId);
+  } catch (e) {
+    console.error(e);
+    alert('Error de red al subir imágenes.');
+  }
+}
+
+async function apiDeleteAd(matchId, url){
+  const res = await fetch(`/api/matches/${matchId}/ads?` + new URLSearchParams({ url }), {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
 
 bootstrap();

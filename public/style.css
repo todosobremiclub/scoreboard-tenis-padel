@@ -9,12 +9,35 @@
 }
 
 *{ box-sizing: border-box; }
+
+/* ==========================
+   FONDO CON IMAGEN (PADEL)
+   ========================== */
 body{
-  margin:0;
-  font-family: system-ui, Segoe UI, Arial, sans-serif;
-  background: var(--green-dark);
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
   color: var(--white);
+
+  /* Imagen de fondo */
+  background-image: url("/assets/Fondo.webp");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  position: relative;
 }
+
+/* Overlay oscuro para contraste */
+body::before{
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.38); /* ajustable 0.30 - 0.55 */
+  pointer-events: none;
+  z-index: -1;
+}
+
 
 /* Contenedor general TV */
 .tv-wrapper{
@@ -600,4 +623,40 @@ body{
   .rg-points{ justify-self: end; }
 }
 
+
+/* ==========================
+   GLASS EFFECT PARA TABLERO
+   ========================== */
+.rg-board{
+  /* semi-transparente */
+  background: rgba(6, 40, 29, 0.55) !important;
+
+  /* efecto vidrio */
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  box-shadow: 0 18px 45px rgba(0,0,0,.40);
+}
+
+/* Topbar y scorecard también transparentes */
+.rg-topbar,
+.rg-scorecard,
+.ads-container{
+  background: rgba(10, 56, 43, 0.55) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  backdrop-filter: blur(8px) saturate(115%);
+  -webkit-backdrop-filter: blur(8px) saturate(115%);
+}
+
+/* Mejora de contraste de textos */
+.rg-title,
+.rg-name .first,
+.rg-name .last{
+  text-shadow: 0 2px 12px rgba(0,0,0,.55);
+}
+
+.rg-clock{
+  text-shadow: 0 2px 12px rgba(0,0,0,.55);
+}
 

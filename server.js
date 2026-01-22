@@ -337,6 +337,28 @@ function safeFilenameFromUrl(matchId, publicUrl) {
   return name;
 }
 
+
+// ---- Servir archivos de publicidad con ruta explícita ----
+// Ej: GET /uploads/:matchId/:filename -> envía el archivo si existe
+app.get('/uploads/:matchId/:filename', (req, res) => {
+  try {
+    const { matchId, filename } = req.params;
+    // Seguridad básica: no permitir traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).send('Bad request');
+    }
+    const abs = path.join(UPLOADS_DIR, matchId, filename);
+    if (!fs.existsSync(abs)) {
+      return res.status(404).send('Not found');
+    }
+    res.sendFile(abs); // <- entrega el archivo tal cual
+  } catch (e) {
+    console.error('[UPLOADS GET] error', e);
+    res.status(500).send('Server error');
+  }
+});
+
+
 /* =========================================================
    Endpoints Meta
    ========================================================= */

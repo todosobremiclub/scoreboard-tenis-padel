@@ -201,10 +201,32 @@ function buildAdsSlides(urls){
   el.adsDots.innerHTML = '';
   adsSlides = [];
 
-  if (!urls.length) {
-    el.adsContainer.style.display = 'none';
-    return;
-  }
+  
+if (!urls.length) {
+  el.adsContainer.style.display = '';
+  // limpiar slides previas
+  el.adsContainer.querySelectorAll('.ads-slide').forEach(n => n.remove());
+  el.adsDots.innerHTML = '';
+
+  // placeholder visible
+  const empty = document.createElement('div');
+  empty.className = 'ads-slide active';
+  empty.innerHTML = `<div style="
+    color:#d6e4dd;
+    font-weight:800;
+    text-align:center;
+    width:100%;
+    padding:12px;
+    opacity:.9;
+  ">
+    Sin publicidades cargadas
+  </div>`;
+  el.adsContainer.appendChild(empty);
+  adsSlides = [empty];
+
+  return;
+}
+
   el.adsContainer.style.display = '';
 
   urls.forEach((url, i) => {

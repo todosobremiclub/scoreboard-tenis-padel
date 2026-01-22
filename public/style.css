@@ -660,3 +660,21 @@ body{
   text-shadow: 0 2px 12px rgba(0,0,0,.55);
 }
 
+
+.ads-container{
+  display: block !important; /* por si quedó algo raro */
+  min-height: 170px;
+}
+
+.ads-empty{
+  width: 100%;
+  text-align: center;
+  font-weight: 900;
+  color: #d6e4dd;
+  opacity: .9;
+  padding: 18px 10px;
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+}
+``
+
+

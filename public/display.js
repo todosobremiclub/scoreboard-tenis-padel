@@ -196,50 +196,46 @@ function setActiveSlide(idx){
     dot.classList.toggle('active', i === idx);
   });
 }
+
 function buildAdsSlides(urls){
+  // Nunca dejar el contenedor oculto
+  el.adsContainer.style.display = '';
+
+  // Borrar SOLO slides anteriores (no tocar los dots base)
   el.adsContainer.querySelectorAll('.ads-slide').forEach(n => n.remove());
   el.adsDots.innerHTML = '';
   adsSlides = [];
 
-  
-if (!urls.length) {
-  el.adsContainer.style.display = '';
-  // limpiar slides previas
-  el.adsContainer.querySelectorAll('.ads-slide').forEach(n => n.remove());
-  el.adsDots.innerHTML = '';
+  // Placeholder si no hay ads
+  if (!urls || !urls.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ads-slide active';
+    empty.innerHTML = `
+      <div class="ads-empty">
+        Sin publicidades cargadas
+      </div>
+    `;
+    el.adsContainer.insertBefore(empty, el.adsDots); // importante: antes de los dots
+    adsSlides = [empty];
+    return;
+  }
 
-  // placeholder visible
-  const empty = document.createElement('div');
-  empty.className = 'ads-slide active';
-  empty.innerHTML = `<div style="
-    color:#d6e4dd;
-    font-weight:800;
-    text-align:center;
-    width:100%;
-    padding:12px;
-    opacity:.9;
-  ">
-    Sin publicidades cargadas
-  </div>`;
-  el.adsContainer.appendChild(empty);
-  adsSlides = [empty];
-
-  return;
-}
-
-  el.adsContainer.style.display = '';
-
+  // Crear slides
   urls.forEach((url, i) => {
     const slide = document.createElement('div');
     slide.className = 'ads-slide';
+
     const img = document.createElement('img');
     img.src = url;
     img.alt = 'Publicidad';
     img.decoding = 'async';
     img.loading = 'eager';
     img.style.objectFit = adObjectFit === 'cover' ? 'cover' : 'contain';
+
     slide.appendChild(img);
-    el.adsContainer.appendChild(slide);
+
+    // IMPORTANTE: insertar antes del contenedor de dots
+    el.adsContainer.insertBefore(slide, el.adsDots);
     adsSlides.push(slide);
 
     const dot = document.createElement('div');
@@ -247,7 +243,6 @@ if (!urls.length) {
     dot.addEventListener('click', () => {
       adIdx = i;
       setActiveSlide(adIdx);
-      // Reiniciar sólo si no está pausado por “match paused”
       if (!adsPaused) {
         clearAdTimer();
         adTimer = setInterval(nextAd, adDurationSec * 1000);
@@ -260,6 +255,7 @@ if (!urls.length) {
   setActiveSlide(adIdx);
   restartAdsTimer();
 }
+
 function nextAd(){
   if (!adsSlides.length) return;
   adIdx = (adIdx + 1) % adsSlides.length;

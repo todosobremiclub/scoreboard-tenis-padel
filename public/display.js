@@ -20,6 +20,7 @@ const el = {
   matchCourt: document.getElementById('matchCourt'),
 
   // Nombres
+
   nameA_first: document.getElementById('nameA_first'),
   nameA_last:  document.getElementById('nameA_last'),
   nameB_first: document.getElementById('nameB_first'),
@@ -250,6 +251,20 @@ function updateAds(urls){
   buildAdsSlides(ads);
 }
 
+
+async function refreshAdsFromApi(){
+  try {
+    const r = await fetch(`/api/matches/${matchId}/ads`);
+    if (!r.ok) return;
+    const { urls } = await r.json();
+    // Fuerza reconstrucción con lo que diga el backend
+    buildAdsSlides(urls || []);
+  } catch (e) {
+    console.warn('No se pudieron cargar ads por REST', e);
+  }
+}
+
+
 // Control de pausa/reanudación del carrusel según estado del partido
 function restartAdsTimer(){
   clearAdTimer();
@@ -271,7 +286,7 @@ function render(st){
   renderNamesAndServe(st);
   renderSets(st);
   renderPoints(st);
-  updateAds(st.ads || []);
+  buildAdsSlides(st.ads || []); // Fuerza reconstruir siempre las slides con lo que llega
   applyAdsPauseFromState(st);
   tickClocks();
 }

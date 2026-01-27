@@ -124,9 +124,10 @@ const upload = multer({
 function generateId() {
   return Math.random().toString(36).slice(2, 8);
 }
+
 function newSet() {
-  return { gamesA: 0,¡De una, Leo! Acá tenés el **`server.js` completo** ya **unificado** con lo que me pasaste + los **endpoints de Súper Admin (CRUD de usuarios)** y el ajuste para **firmar la cookie de sesión**.  
-Pegalo tal cual y debería andar sin romper nada de la lógica de partidos/ads/socket que ya tenías. [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+  return { gamesA: 0, gamesB: 0, tieBreak: { active: false, pointsA: 0, pointsB: 0 } };
+}
 
 > **Novedades clave incluidas:**
 > - `requireSuperAdmin` (middleware de rol). [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)  

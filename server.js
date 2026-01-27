@@ -5,153 +5,11 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 
-// --- Archivos / Uploads (Ads) ---
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
 
-// --- Auth / Postgres ---
-import bcrypt from 'bcrypt';
-import cookieParser from 'cookie-parser';
-import crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
-import pg from 'pg';
-const { Pool } = pg;
-
-// -------------------------------
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
-
-// Render/Proxies: necesario para cookies "secure"
-app.set('trust proxy', 1);
-
-// Middlewares base
-app.use(express.json());
-app.use(cookieParser(process.env.COOKIE_SECRET || 'dev-secret'));
-app.use(express.static('public')); // sirve /public
-
-// Ruta raíz -> Admin actual
-app.get('/', (_req, res) => res.redirect('/admin.html'));
-
-const PORT = process.env.PORT ?? 3000;
-
-// =========================================================
-// PostgreSQL (usuarios / sesiones)
-// =========================================================
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  console.warn('[DB] Falta DATABASE_URL. Auth y CRUD de usuarios no funcionarán sin DB.');
-}
-const db = DATABASE_URL
-  ? new Pool({
-      connectionString: DATABASE_URL,
-      ssl: { rejectUnauthorized: false }, // Render usa SSL
-    })
-  : null;
-
-const hasDB = !!db;
-const requireDB = (res) => {
-  if (!hasDB) {
-    res.status(503).json({ error: 'Base de datos no configurada' });
-    return false;
-  }
-  return true;
-};
-
-// =========================================================
-/** Config / Constantes (partidos) */
-// =========================================================
-const MATCH_STAGES = [
-  'Amistoso',
-  'Fase de grupos',
-  '32vos de final',
-  '16vos de final',
-  '8vos de final',
-  '4tos de final',
-  'Semi-Final',
-  'Final',
-];
-// Carpeta de subidas para publicidad
-const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
-ensureDir(UPLOADS_DIR);
-
-// =========================================================
-// Subidas (Multer) - Publicidad
-// =========================================================
-function ensureDir(p) {
-  if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
-}
-// Guardamos en /public/uploads/:matchId/
-const storage = multer.diskStorage({
-  destination: function (req, _file, cb) {
-    const matchId = req.params.id ?? req.body.matchId;
-    const dest = path.join(UPLOADS_DIR, matchId);
-    ensureDir(dest);
-    cb(null, dest);
-  },
-  filename: function (_req, file, cb) {
-    const ext = path.extname(file.originalname);
-    const base = path
-      .basename(file.originalname, ext)
-      .replace(/\s+/g, '_')
-      .replace(/[^a-zA-Z0-9_\-]/g, '');
-    cb(null, `${Date.now()}_${base}${ext}`);
-  },
-});
-const upload = multer({
-  storage,
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Solo se permiten imágenes'));
-  },
-  limits: { fileSize: 10 * 1024 * 1024, files: 20 }, // 10MB c/u, hasta 20 archivos
-});
-
-// =========================================================
-// Estado en memoria (partidos)
-// =========================================================
-/** @type {Map<string, any>} */ const matches = new Map(); // scheduled | running | paused
-/** @type {Map<string, any>} */ const matchesHistory = new Map(); // finished
-
-// =========================================================
-// Utilidades (partidos)
-// =========================================================
-function generateId() {
-  return Math.random().toString(36).slice(2, 8);
-}
-
-function newSet() {
-  return { gamesA: 0, gamesB: 0, tieBreak: { active: false, pointsA: 0, pointsB: 0 } };
-}
-
-> **Novedades clave incluidas:**
-> - `requireSuperAdmin` (middleware de rol). [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)  
-> - Rutas: `GET/POST/PATCH/DELETE /api/superadmin/users`. [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)  
-> - Cookie de sesión **firmada** (`signed: true`) + lectura desde `req.signedCookies`. [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)  
-> - Guard opcional si falta `DATABASE_URL` (responde `503`). [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
-
----
-
-```javascript
-// =======================
-// server.js (ESM / Node)
-// =======================
-import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
-
-// --- Archivos / Uploads (Ads) ---
-import fs from 'fs';
-import path from 'path';
-import multer from 'multer';
-import { fileURLToPath } from 'url';
-
-// --- Auth / Postgres ---
 import bcrypt from 'bcrypt';
 import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
@@ -166,31 +24,28 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// Render/Proxies: necesario para cookies "secure"
 app.set('trust proxy', 1);
 
-// Middlewares base
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET || 'dev-secret'));
-app.use(express.static('public')); // sirve /public
+app.use(express.static('public'));
 
-// Ruta raíz -> Admin actual
 app.get('/', (_req, res) => res.redirect('/admin.html'));
 
 const PORT = process.env.PORT ?? 3000;
 
 // =========================================================
-// PostgreSQL (usuarios / sesiones)
+// PostgreSQL
 // =========================================================
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  console.warn('[DB] Falta DATABASE_URL. Auth no funcionará sin DB.');
+  console.warn('[DB] Falta DATABASE_URL. Auth/CRUD no funcionarán sin DB.');
 }
 const hasDB = !!DATABASE_URL;
 const db = hasDB
   ? new Pool({
       connectionString: DATABASE_URL,
-      ssl: { rejectUnauthorized: false }, // Render usa SSL
+      ssl: { rejectUnauthorized: false },
     })
   : null;
 
@@ -203,7 +58,7 @@ const requireDB = (res) => {
 };
 
 // =========================================================
-/** Config / Constantes (partidos) */
+// Config / Constantes (partidos)
 // =========================================================
 const MATCH_STAGES = [
   'Amistoso',
@@ -214,9 +69,8 @@ const MATCH_STAGES = [
   '4tos de final',
   'Semi-Final',
   'Final',
-]; // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+];
 
-// Carpeta de subidas para publicidad
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 ensureDir(UPLOADS_DIR);
 
@@ -226,7 +80,6 @@ ensureDir(UPLOADS_DIR);
 function ensureDir(p) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
-// Guardamos en /public/uploads/:matchId/
 const storage = multer.diskStorage({
   destination: function (req, _file, cb) {
     const matchId = req.params.id ?? req.body.matchId;
@@ -249,14 +102,14 @@ const upload = multer({
     if (file.mimetype.startsWith('image/')) cb(null, true);
     else cb(new Error('Solo se permiten imágenes'));
   },
-  limits: { fileSize: 10 * 1024 * 1024, files: 20 }, // 10MB c/u, hasta 20 archivos
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+  limits: { fileSize: 10 * 1024 * 1024, files: 20 },
+});
 
 // =========================================================
 // Estado en memoria (partidos)
 // =========================================================
-/** @type {Map<string, any>} */ const matches = new Map(); // scheduled | running | paused
-/** @type {Map<string, any>} */ const matchesHistory = new Map(); // finished
+/** @type {Map<string, any>} */ const matches = new Map();
+/** @type {Map<string, any>} */ const matchesHistory = new Map();
 
 // =========================================================
 // Utilidades (partidos)
@@ -272,7 +125,6 @@ function nowMs() {
 }
 function touchUpdated(match) {
   match.updatedAt = nowMs();
-  // (Futuro) Persistir en Postgres si migramos partidos a DB
 }
 function isFinished(match) {
   return match.status === 'finished';
@@ -336,7 +188,7 @@ function awardSet(match, winner, viaTB = false) {
     return;
   }
   match.sets.push(newSet());
-  match.serverIndex = match.serverIndex === 0 ? 1 : 0; // alterna
+  match.serverIndex = match.serverIndex === 0 ? 1 : 0;
   touchUpdated(match);
 }
 function awardGame(match, winner) {
@@ -347,8 +199,7 @@ function awardGame(match, winner) {
   match.serverIndex = match.serverIndex === 0 ? 1 : 0;
   checkActivateTieBreak(match, set);
   if (!set.tieBreak.active) {
-    const gA = set.gamesA,
-      gB = set.gamesB;
+    const gA = set.gamesA, gB = set.gamesB;
     if ((gA >= 6 || gB >= 6) && Math.abs(gA - gB) >= 2) {
       awardSet(match, gA > gB ? 'A' : 'B');
       return;
@@ -362,8 +213,7 @@ function awardPointInTieBreak(match, side) {
   const target = match.rules.tieBreakPoints;
   if (side === 'A') tb.pointsA++;
   else tb.pointsB++;
-  const pA = tb.pointsA,
-    pB = tb.pointsB;
+  const pA = tb.pointsA, pB = tb.pointsB;
   if ((pA >= target || pB >= target) && Math.abs(pA - pB) >= 2) {
     awardSet(match, pA > pB ? 'A' : 'B', true);
     return;
@@ -376,20 +226,19 @@ function awardPointInRegularGame(match, side) {
   if (noAdvantage) {
     if (side === 'A') g.pointsA++;
     else g.pointsB++;
-    if ((g.pointsA >= 4 || g.pointsB >= 4)) {
+    if (g.pointsA >= 4 || g.pointsB >= 4) {
       awardGame(match, g.pointsA > g.pointsB ? 'A' : 'B');
       return;
     }
     touchUpdated(match);
     return;
   }
-  // Con ventaja clásica
   if (g.pointsA === 3 && g.pointsB === 3) {
     if (g.advantage === null) g.advantage = side;
     else if (g.advantage === side) {
       awardGame(match, side);
       return;
-    } else g.advantage = null; // deuce
+    } else g.advantage = null;
     touchUpdated(match);
     return;
   }
@@ -429,7 +278,7 @@ function createMatch({ name, teamA, teamB, rules, firstServerIndex = 0, stage, c
     pausedAt: null,
     accumulatedMs: 0,
     running: false,
-    status: 'scheduled', // scheduled | running | paused | finished
+    status: 'scheduled',
     rules: {
       bestOf: rules.bestOf ?? 3,
       tieBreakAt: rules.tieBreakAt ?? '6-6',
@@ -477,17 +326,16 @@ app.get('/uploads/:matchId/:filename', (req, res) => {
     console.error('[UPLOADS GET] error', e);
     res.status(500).send('Server error');
   }
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 // =========================================================
-// Endpoints Meta (instancias)
+// Endpoints Meta
 // =========================================================
-app.get('/api/meta/stages', (_req, res) => res.json({ stages: MATCH_STAGES })); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+app.get('/api/meta/stages', (_req, res) => res.json({ stages: MATCH_STAGES }));
 
 // =========================================================
-// Endpoints Partidos (REST)
+ // Endpoints Partidos (REST)
 // =========================================================
-// Crear partido
 app.post('/api/matches', (req, res) => {
   const { name, teamA, teamB, rules, firstServer, stage, courtName } = req.body ?? {};
   const firstServerIndex = firstServer === 'B' ? 1 : 0;
@@ -501,10 +349,8 @@ app.post('/api/matches', (req, res) => {
     courtName: courtName ?? '',
   });
   res.json({ id: match.id });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Listar partidos
-// GET /api/matches?status=active|finished|all&stage=...&q=...&sort=-createdAt
 app.get('/api/matches', (req, res) => {
   const { status = 'active', stage, q = '', sort = '-createdAt' } = req.query;
   const norm = (s) => (s ?? '').toString().toLowerCase();
@@ -541,17 +387,15 @@ app.get('/api/matches', (req, res) => {
   if (status === 'finished') return res.json({ finished });
   if (status === 'all') return res.json({ active, finished });
   return res.json({ active });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Obtener estado (activo o histórico)
 app.get('/api/matches/:id', (req, res) => {
   const { id } = req.params;
   let match = matches.get(id) ?? matchesHistory.get(id);
   if (!match) return res.status(404).json({ error: 'No encontrado' });
   res.json(formatState(match));
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Editar datos básicos (solo activos)
 app.patch('/api/matches/:id', (req, res) => {
   const { id } = req.params;
   const match = matches.get(id);
@@ -565,9 +409,8 @@ app.patch('/api/matches/:id', (req, res) => {
   touchUpdated(match);
   io.to(match.id).emit('state', formatState(match));
   res.json({ ok: true });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Iniciar
 app.post('/api/matches/:id/start', (req, res) => {
   const match = matches.get(req.params.id);
   if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
@@ -580,9 +423,8 @@ app.post('/api/matches/:id/start', (req, res) => {
   }
   io.to(match.id).emit('state', formatState(match));
   res.json({ ok: true });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Pausar
 app.post('/api/matches/:id/pause', (req, res) => {
   const match = matches.get(req.params.id);
   if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
@@ -596,9 +438,8 @@ app.post('/api/matches/:id/pause', (req, res) => {
   }
   io.to(match.id).emit('state', formatState(match));
   res.json({ ok: true });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Reanudar
 app.post('/api/matches/:id/resume', (req, res) => {
   const match = matches.get(req.params.id);
   if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
@@ -611,17 +452,15 @@ app.post('/api/matches/:id/resume', (req, res) => {
   }
   io.to(match.id).emit('state', formatState(match));
   res.json({ ok: true });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Finalizar
 app.post('/api/matches/:id/finish', (req, res) => {
   const match = matches.get(req.params.id);
   if (!match) return res.status(404).json({ error: 'No encontrado o ya finalizado' });
   moveToHistory(match);
   res.json({ ok: true });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Sumar punto
 app.post('/api/matches/:id/point/:side', (req, res) => {
   const match = matches.get(req.params.id);
   if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
@@ -633,9 +472,8 @@ app.post('/api/matches/:id/point/:side', (req, res) => {
     io.to(match.id).emit('state', formatState(match));
   }
   res.json({ ok: true });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Reset del game actual
 app.post('/api/matches/:id/reset-game', (req, res) => {
   const match = matches.get(req.params.id);
   if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
@@ -643,9 +481,8 @@ app.post('/api/matches/:id/reset-game', (req, res) => {
   touchUpdated(match);
   io.to(match.id).emit('state', formatState(match));
   res.json({ ok: true });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
-// Cambiar servidor
 app.post('/api/matches/:id/toggle-server', (req, res) => {
   const match = matches.get(req.params.id);
   if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
@@ -653,7 +490,7 @@ app.post('/api/matches/:id/toggle-server', (req, res) => {
   touchUpdated(match);
   io.to(match.id).emit('state', formatState(match));
   res.json({ ok: true });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 // =========================================================
 // Publicidad (Ads)
@@ -663,7 +500,7 @@ app.get('/api/matches/:id/ads', (req, res) => {
   const match = matches.get(id) ?? matchesHistory.get(id);
   if (!match) return res.status(404).json({ error: 'No encontrado' });
   res.json({ urls: match.ads ?? [] });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 app.post('/api/matches/:id/ads', upload.array('files', 20), (req, res) => {
   const { id } = req.params;
@@ -675,7 +512,7 @@ app.post('/api/matches/:id/ads', upload.array('files', 20), (req, res) => {
   touchUpdated(match);
   io.to(match.id).emit('state', formatState(match));
   res.json({ urls: match.ads });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 app.delete('/api/matches/:id/ads', (req, res) => {
   const { id } = req.params;
@@ -692,7 +529,7 @@ app.delete('/api/matches/:id/ads', (req, res) => {
   touchUpdated(match);
   io.to(match.id).emit('state', formatState(match));
   res.json({ urls: match.ads });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 // =========================================================
 // Socket.IO (partidos)
@@ -704,17 +541,16 @@ io.on('connection', (socket) => {
     socket.join(matchId);
     socket.emit('state', formatState(match));
   });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 // =========================================================
-// ---------- AUTENTICACIÓN (email + contraseña) ----------
+// Autenticación (email + contraseña)
 // =========================================================
 const SESSION_COOKIE = 'sid';
 const isProd = process.env.NODE_ENV === 'production';
 const SESSION_TTL_DAYS = parseInt(process.env.SESSION_TTL_DAYS ?? '7', 10);
 const daysToMs = (d) => d * 24 * 60 * 60 * 1000;
 
-// Hash helper (no guardamos tokens en claro en DB)
 function sha256Hex(s) {
   return crypto.createHash('sha256').update(s).digest('hex');
 }
@@ -738,7 +574,6 @@ async function getUserPublicById(userId) {
   return rows[0] ?? null;
 }
 async function issueSession(res, user, req) {
-  // token aleatorio (solo cookie). En DB guardamos el hash.
   const rawToken = `${uuidv4()}.${crypto.randomBytes(24).toString('hex')}`;
   const tokenHash = sha256Hex(rawToken);
   const createdAt = nowMs();
@@ -750,11 +585,11 @@ async function issueSession(res, user, req) {
   );
   res.cookie(SESSION_COOKIE, rawToken, {
     httpOnly: true,
-    secure: isProd, // en Render es true
+    secure: isProd,
     sameSite: 'lax',
     path: '/',
     maxAge: daysToMs(SESSION_TTL_DAYS),
-    signed: true, // **Firmamos la cookie**
+    signed: true,
   });
   await db.query('UPDATE users SET last_login_at=$1, updated_at=$1 WHERE id=$2', [createdAt, user.id]);
   return { token: rawToken, expiresAt };
@@ -781,7 +616,6 @@ async function readSession(req) {
   await db.query('UPDATE user_sessions SET last_seen_at=$1 WHERE token_hash=$2', [nowMs(), tokenHash]);
   return { session, user, tokenHash };
 }
-// Middlewares de auth
 async function authOptional(req, _res, next) {
   try {
     if (!hasDB) return next();
@@ -805,7 +639,6 @@ async function authRequired(req, res, next) {
     return res.status(401).json({ error: 'No autenticado' });
   }
 }
-// **Rol: Super Admin**
 function requireSuperAdmin(req, res, next) {
   if (!req.user || req.user.role !== 'superadmin') {
     return res.status(403).json({ error: 'No autorizado' });
@@ -813,10 +646,8 @@ function requireSuperAdmin(req, res, next) {
   next();
 }
 
-// Aplico authOptional global (si querés saber quién es)
 app.use(authOptional);
 
-// Rutas de autenticación
 app.post('/api/auth/login', async (req, res) => {
   if (!requireDB(res)) return;
   try {
@@ -844,7 +675,7 @@ app.post('/api/auth/login', async (req, res) => {
     console.error('[auth/login] error', e);
     return res.status(500).json({ error: 'Error del servidor' });
   }
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 app.post('/api/auth/logout', async (req, res) => {
   if (!requireDB(res)) return;
@@ -865,11 +696,11 @@ app.post('/api/auth/logout', async (req, res) => {
     console.error('[auth/logout] error', e);
     return res.status(500).json({ error: 'Error del servidor' });
   }
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 app.get('/api/auth/me', authRequired, async (req, res) => {
   return res.json({ user: req.user });
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 // =========================================================
 // Super Admin - Gestión de Usuarios (CRUD)
@@ -896,7 +727,7 @@ app.get('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, re
     console.error('[superadmin list users]', e);
     res.status(500).json({ error: 'Error del servidor' });
   }
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 app.post('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
@@ -925,7 +756,7 @@ app.post('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, r
     console.error('[superadmin create user]', e);
     res.status(500).json({ error: 'Error del servidor' });
   }
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 app.patch('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
@@ -957,7 +788,7 @@ app.patch('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (r
       fields.push(`password_hash=$${fields.length + 1}`);
       params.push(hash);
     }
-    if (!fields.length) return res.json({ ok: true }); // nada para actualizar
+    if (!fields.length) return res.json({ ok: true });
 
     fields.push(`updated_at=$${fields.length + 1}`);
     params.push(Date.now());
@@ -972,25 +803,25 @@ app.patch('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (r
     console.error('[superadmin patch user]', e);
     res.status(500).json({ error: 'Error del servidor' });
   }
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 app.delete('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
   try {
     const id = parseInt(req.params.id, 10);
     await db.query(`UPDATE users SET active=false, updated_at=$1 WHERE id=$2`, [Date.now(), id]);
-    // Opcional: invalidar sesiones activas del usuario
     await db.query(`DELETE FROM user_sessions WHERE user_id=$1`, [id]);
     res.json({ ok: true });
   } catch (e) {
     console.error('[superadmin delete user]', e);
     res.status(500).json({ error: 'Error del servidor' });
   }
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
 
 // =========================================================
 // Startup
 // =========================================================
 server.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
-}); // [1](https://secarsecurity-my.sharepoint.com/personal/lsardella_securion_com_ar/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/server.js)
+});
+``

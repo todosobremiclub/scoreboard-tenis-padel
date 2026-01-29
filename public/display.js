@@ -255,11 +255,12 @@
       restartAdsTimer();
       return;
     }
-    const shouldPause = !st.running;
-    if (shouldPause !== adsPaused) {
-      adsPaused = shouldPause;
-      restartAdsTimer();
-    }
+    function applyAdsPauseFromState(st){
+  // Para TV: por defecto NO pausamos nunca.
+  // Si querés pausar, lo implementamos con ?pauseAds=1
+  adsPaused = false;
+  restartAdsTimer();
+}
   }
 
   function render(st) {

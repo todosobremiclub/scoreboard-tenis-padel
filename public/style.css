@@ -601,3 +601,26 @@ button:disabled{
   .ads-container.ads-large{ height: 150px; }
   .prevcell{ width: 32px; height: 40px; font-size: 18px; }
 }
+
+/* FIX banner ads en desktop */
+#adsContainer.ads-container.ads-large{
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+
+  height: 240px !important;
+  min-height: 240px !important;
+}
+
+/* En mobile baja un poco (como ya te funciona) */
+@media (max-width: 900px){
+  #adsContainer.ads-container.ads-large{
+    height: 170px !important;
+    min-height: 170px !important;
+  }
+}
+
+/* Asegura que la slide activa se muestre */
+#adsContainer.ads-container .ads-slide.active{
+  display: flex !important;
+}

@@ -624,3 +624,34 @@ button:disabled{
 #adsContainer.ads-container .ads-slide.active{
   display: flex !important;
 }
+
+
+/* =========================================================
+   FIX DEFINITIVO: banner de publicidad visible en desktop
+   (había un display:none pisando #adsContainer)
+   ========================================================= */
+#adsContainer.ads-container{
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* asegura que el banner grande tenga altura real */
+#adsContainer.ads-container.ads-large{
+  height: 240px !important;
+  min-height: 240px !important;
+}
+
+/* asegura que el slide activo se muestre */
+#adsContainer.ads-container .ads-slide.active{
+  display: flex !important;
+}
+
+/* mobile (si querés mantener más chico) */
+@media (max-width: 900px){
+  #adsContainer.ads-container.ads-large{
+    height: 170px !important;
+    min-height: 170px !important;
+  }
+}
+

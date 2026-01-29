@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Super Admin | Scoreboard Tenis/Pádel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0e1116;
+      --card: #151a21;
+      --muted: #8892a6;
+      --text: #e6edf3;
+      --primary: #2ea043;
+      --primary-2: #238636;
+      --danger: #d73a49;
+      --accent: #3b82f6;
+      --border: #263241;
+      --warn: #f59e0b;
+    }
+    *{box-sizing:border-box}
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell;
+      background: var(--bg); color: var(--text);
+    }
+    header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 16px 20px; border-bottom:1px solid var(--border); background: #0c1016;
+      position: sticky; top: 0; z-index: 10;
+    }
+    header h1 { margin:0; font-size: 18px; font-weight: 600; }
+    header .right { display:flex; gap:8px; align-items:center; }
+    main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    .card { background: var(--card); border:1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .grid { display:grid; gap: 12px; }
+    .row { display:flex; gap: 8px; align-items:center; flex-wrap:wrap; }
+    input, select {
+      background:#0e1520; color:var(--text); border:1px solid var(--border);
+      padding:8px 10px; border-radius:8px; outline:none;
+    }
+    input::placeholder { color: #9aa6bd; }
+    button {
+      border:1px solid var(--border); background:#101826; color:var(--text);
+      padding:8px 12px; border-radius:8px; cursor:pointer;
+    }
+    .btn-primary { background: var(--primary-2); border-color:#1f6f2e; }
+    .btn-danger  { background: #2a1113; color:#ffb4bc; border-color:#4b161c; }
+    .btn-warn    { background: #30240a; color:#ffd68c; border-color:#503a0c; }
+    .btn-accent  { background: #123061; border-color:#1e3a8a; color:#dbeafe; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border-bottom:1px solid var(--border); padding:10px; text-align:left; font-size:14px; }
+    th { color:#aab2bf; font-weight:600; }
+    tr:hover td { background:#10151d; }
+    .muted { color: var(--muted); }
+    .pill { padding:3px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); }
+    .pill.on { background:#0d1d12; color:#9af5b5; border-color:#1a3b23; }
+    .pill.off { background:#2b1a1a; color:#ffb0b7; border-color:#4a1f26; }
+    .hidden { display:none !important; }
+    .spacer { flex:1; }
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items:center; justify-content:center; z-index: 50;
+    }
+    .modal { background: var(--card); border:1px solid var(--border); border-radius: 12px; padding:16px; width: 520px; max-width: 92vw; }
+    .modal h3 { margin-top:0 }
+    .modal .footer { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:12px; padding:2px 6px; border:1px solid var(--border); border-radius:6px; background:#0b1220; color:#bcd; }
+    .link { color:#9ecbff; text-decoration: none; }
+    .link:hover { text-decoration: underline; }
+    .error { color:#ff9aa5; }
+    .success { color:#9af5b5; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Consola de Súper Admin</h1>
+    <div class="right">
+      <span id="meBadge" class="muted">No autenticado</span>
+      <button id="btnLogout" class="hidden">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Login Card -->
+    <section id="loginCard" class="card">
+      <h2 style="margin:0 0 8px 0;">Ingresá como Súper Admin</h2>
+      <div class="grid" style="grid-template-columns: 1fr 1fr auto; align-items:end;">
+        <div class="grid">
+          <label>Email</label>
+          <input id="loginEmail" type="email" placeholder="superadmin@tuclub.com" autocomplete="username" />
+        </div>
+        <div class="grid">
+          <label>Contraseña</label>
+          <input id="loginPassword" type="password" placeholder="********" autocomplete="current-password" />
+        </div>
+        <div class="grid">
+          <label>&nbsp;</label>
+          <button id="btnLogin" class="btn-primary">Iniciar sesión</button>
+        </div>
+      </div>
+      <div id="loginMsg" class="muted" style="margin-top:8px;"></div>
+    </section>
+
+    <!-- Panel de usuarios -->
+    <section id="usersCard" class="card hidden">
+      <div class="row">
+        <h2 style="margin:0;">Usuarios</h2>
+        <div class="spacer"></div>
+        <input id="q" type="search" placeholder="Buscar por nombre o email..." style="min-width:260px;">
+        <button id="btnSearch" class="btn-accent">Buscar</button>
+        <button id="btnNew" class="btn-primary">Nuevo usuario</button>
+      </div>
+
+      <div class="muted" style="margin:8px 0">Solo visible para rol <span class="kbd">superadmin</span>. Los cambios impactan en quién puede entrar a <span class="kbd">admin.html</span>.</div>
+
+      <div style="overflow:auto; margin-top:8px;">
+        <table id="tblUsers">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Email</th>
+              <th>Rol</th>
+              <th>Estado</th>
+              <th>Últ. login</th>
+              <th style="width:220px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyUsers">
+            <tr><td colspan="7" class="muted">Sin datos…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal Crear/Editar -->
+  <div id="modalBackdrop" class="modal-backdrop">
+    <div class="modal">
+      <h3 id="modalTitle">Nuevo usuario</h3>
+      <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="grid">
+          <label>Nombre</label>
+          <input id="f_name" type="text" placeholder="Nombre y apellido">
+        </div>
+        <div class="grid">
+          <label>Email</label>
+          <input id="f_email" type="email" placeholder="usuario@dominio.com">
+        </div>
+        <div class="grid">
+          <label>Rol</label>
+          <select id="f_role">
+            <option value="admin">admin</option>
+            <option value="staff">staff</option>
+            <option value="superadmin">superadmin</option>
+          </select>
+        </div>
+        <div class="grid">
+          <label>Estado</label>
+          <select id="f_active">
+            <option value="true">Activo</option>
+            <option value="false">Inactivo</option>
+          </select>
+        </div>
+        <div class="grid" style="grid-column:1/span 2;">
+          <label>Contraseña <span class="muted">(dejar vacío para no cambiar)</span></label>
+          <input id="f_password" type="password" placeholder="********">
+        </div>
+      </div>
+      <div id="modalMsg" class="muted" style="margin-top:8px;"></div>
+      <div class="footer">
+        <button id="btnCancel">Cancelar</button>
+        <button id="btnSave" class="btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  /superadmin.js</script>
+</body>
+</html>

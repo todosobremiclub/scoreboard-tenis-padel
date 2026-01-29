@@ -37,7 +37,13 @@ html, body{ height: 100%; }
 body{
   margin: 0;
   min-height: 100vh;
-  font-family: "Segoe UI", system-ui, -apple-system, "Inter", Arial, sans-serif;
+
+  /* Nueva tipografía premium y deportiva */
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+
+  /* Números más prolijos (ideal para el tablero) */
+  font-variant-numeric: tabular-nums;
+
   color: var(--white);
 
   background-image: url("/assets/Fondo.webp");
@@ -56,7 +62,6 @@ body::before{
   pointer-events: none;
   z-index: -1;
 }
-
 /* -------------------------
    Shared containers
 -------------------------- */
@@ -242,16 +247,20 @@ button:disabled{
   text-align: center;
 }
 
+/* Títulos y apellidos con más carácter */
 .rolex-title{
-  font-size: 34px;
   font-weight: 900;
-  color: #f1f1f1;
-  text-shadow: 0 2px 12px rgba(0,0,0,.55);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  letter-spacing: .5px;
 }
 
+.rolex-name .last{
+  font-weight: 900;
+  letter-spacing: .8px;
+}
+
+.m.big{
+  font-weight: 900; /* números del tablero más deportivos */
+}
 .rolex-stage{
   display: inline-block;
   margin-top: 6px;

@@ -1,11 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <title>Administrador del Partido</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-
   <link rel="stylesheet" href="/style.css">
 
   <!-- Estilos mínimos extra para tabs/badges -->
@@ -52,214 +50,278 @@
     }
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <h1>Administrador del Partido</h1>
+  <!-- =========================
+       LOGIN OVERLAY (Admin)
+       ========================= -->
+  <div id="loginOverlay" style="
+    position:fixed; inset:0; background:rgba(0,0,0,.65);
+    display:none; align-items:center; justify-content:center; z-index:9999;
+  ">
+    <div style="
+      width:520px; max-width:92vw;
+      background:#151a21; border:1px solid #263241; border-radius:14px;
+      padding:16px; color:#e6edf3; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
+    ">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <h2 style="margin:0; font-size:18px;">Ingreso Admin</h2>
+        <span id="loginEnvBadge" style="font-size:12px; color:#8892a6;"></span>
+      </div>
 
-    <!-- Crear partido -->
-    <section class="form">
-      <h2>Crear partido</h2>
-      <div class="grid-2">
-        <div>
-          <label>Nombre del partido</label>
-          <input id="matchName" type="text" value="Partido de prueba">
-        </div>
+      <p style="margin:8px 0 12px; color:#8892a6;">
+        Iniciá sesión para acceder a <b>admin.html</b>.
+      </p>
 
-        <div>
-          <label>Instancia del partido</label>
-          <select id="matchStage">
-            <option value="Amistoso" selected>Amistoso</option>
-            <option value="Fase de grupos">Fase de grupos</option>
-            <option value="32vos de final">32vos de final</option>
-            <option value="16vos de final">16vos de final</option>
-            <option value="8vos de final">8vos de final</option>
-            <option value="4tos de final">4tos de final</option>
-            <option value="Semi-Final">Semi-Final</option>
-            <option value="Final">Final</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Jugador/Equipo A</label>
-          <input id="teamA" type="text" value="Equipo A">
-        </div>
-        <div>
-          <label>Jugador/Equipo B</label>
-          <input id="teamB" type="text" value="Equipo B">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div style="display:grid; gap:6px;">
+          <label style="font-size:13px; color:#b6c0d1;">Email</label>
+          <input id="adminLoginEmail" type="email" placeholder="usuario@dominio.com" autocomplete="username"
+            style="background:#0e1520;color:#e6edf3;border:1px solid #263241;padding:9px 10px;border-radius:10px;outline:none;">
         </div>
 
-        <div>
-          <label>Saca primero</label>
-          <select id="firstServer">
-            <option value="A" selected>Equipo A</option>
-            <option value="B">Equipo B</option>
-          </select>
-        </div>
-        <div>
-          <label>Mejor de (sets)</label>
-          <select id="bestOf">
-            <option value="1">1</option>
-            <option value="3" selected>3</option>
-          </select>
+        <div style="display:grid; gap:6px;">
+          <label style="font-size:13px; color:#b6c0d1;">Contraseña</label>
+          <input id="adminLoginPassword" type="password" placeholder="********" autocomplete="current-password"
+            style="background:#0e1520;color:#e6edf3;border:1px solid #263241;padding:9px 10px;border-radius:10px;outline:none;">
         </div>
 
-        <div>
-          <label>Tie-break</label>
-          <select id="tieBreakAt">
-            <option value="6-6" selected>En 6-6</option>
-            <option value="5-5">En 5-5 (short set)</option>
-            <option value="none">Sin tie-break</option>
-          </select>
-        </div>
-        <div>
-          <label>Punto de oro (sin ventajas)</label>
-          <select id="noAdvantage">
-            <option value="false" selected>No</option>
-            <option value="true">Sí</option>
-          </select>
-        </div>
-
-        <!-- NUEVO: Cancha -->
-        <div>
-          <label>Cancha</label>
-          <input id="courtName" type="text" placeholder="Cancha 1">
+        <div style="grid-column:1 / span 2; display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:4px;">
+          <button id="adminBtnLogin"
+            style="border:1px solid #1f6f2e;background:#238636;color:#e6edf3;padding:9px 12px;border-radius:10px;cursor:pointer;">
+            Iniciar sesión
+          </button>
         </div>
       </div>
 
-      <div style="margin-top:12px;" class="wrap">
-        <button id="createBtn">Crear partido</button>
-        <div id="tvUrlWrap" style="display:none;">
-          <div><strong>URL para la TV:</strong> <span id="tvUrl"></span></div>
-          <small class="muted">Abrí esta URL en la pantalla (Smart TV/Chromecast/PC).</small>
-        </div>
-      </div>
-    </section>
-
-    <!-- Panel de administración de múltiples partidos -->
-    <section class="controls">
-      <h2>Partidos</h2>
-
-      <!-- Pestañas -->
-      <div class="tabs" id="tabs">
-        <div class="tab active" data-tab="active">Activos</div>
-        <div class="tab" data-tab="history">Histórico</div>
-      </div>
-
-      <!-- Filtros / búsqueda / ordenar -->
-      <div class="filterbar">
-        <input id="searchQ" type="search" placeholder="Buscar por partido o equipos..." />
-        <select id="filterStage">
-          <option value="">Todas las instancias</option>
-        </select>
-        <select id="sortBy">
-          <option value="-createdAt" selected>Más recientes</option>
-          <option value="name">Nombre (A-Z)</option>
-          <option value="-updatedAt">Última actualización</option>
-          <option value="-endedAt">Finalizados (más nuevos)</option>
-        </select>
-        <button id="refreshBtn">Refrescar</button>
-      </div>
-
-      <!-- Listas -->
-      <div id="activeList" class="list"></div>
-      <div id="historyList" class="list" style="display:none;"></div>
-    </section>
+      <div id="adminLoginMsg" style="margin-top:10px; color:#8892a6; font-size:13px;"></div>
+    </div>
   </div>
 
-  <!-- Template de ítem de partido -->
-  <template id="matchItemTemplate">
-    <div class="card match" data-id="">
-      <div class="row" style="justify-content: space-between; align-items: flex-start; gap: 12px;">
-        <div style="min-width: 260px;">
-          <div class="wrap">
-            <span class="badge stage">Amistoso</span>
-            <span class="badge status">scheduled</span>
+  <!-- Barra mínima de sesión -->
+  <div id="adminSessionBar" style="
+    position:fixed; right:16px; bottom:16px;
+    background:#0c1016; border:1px solid #263241; border-radius:12px;
+    padding:10px 12px; color:#e6edf3; display:none; gap:10px; align-items:center; z-index:9998;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
+  ">
+    <span id="adminMeLabel" style="font-size:13px; color:#b6c0d1;"></span>
+    <button id="adminBtnLogout"
+      style="border:1px solid #263241;background:#101826;color:#e6edf3;padding:7px 10px;border-radius:10px;cursor:pointer;">
+      Cerrar sesión
+    </button>
+  </div>
+
+  <!-- =========================
+       APP ADMIN (se oculta hasta autenticar)
+       ========================= -->
+  <div id="adminApp" style="display:none;">
+    <div class="container">
+      <h1>Administrador del Partido</h1>
+
+      <!-- Crear partido -->
+      <section class="form">
+        <h2>Crear partido</h2>
+        <div class="grid-2">
+          <div>
+            <label>Nombre del partido</label>
+            <input id="matchName" type="text" value="Partido de prueba">
           </div>
-          <div class="match-title">Partido</div>
-          <div class="teams-line">Equipo A vs Equipo B</div>
-          <div class="muted meta">
-            Saca: <span class="serve">Equipo A</span> •
-            Cancha: <span class="court">—</span> •
-            Sets: <span class="sets">0-0</span> •
-            Games: <span class="games">0-0</span> •
-            Points: <span class="points">0-0</span>
+          <div>
+            <label>Instancia del partido</label>
+            <select id="matchStage">
+              <option value="Amistoso" selected>Amistoso</option>
+              <option value="Fase de grupos">Fase de grupos</option>
+              <option value="32vos de final">32vos de final</option>
+              <option value="16vos de final">16vos de final</option>
+              <option value="8vos de final">8vos de final</option>
+              <option value="4tos de final">4tos de final</option>
+              <option value="Semi-Final">Semi-Final</option>
+              <option value="Final">Final</option>
+            </select>
+          </div>
+          <div>
+            <label>Jugador/Equipo A</label>
+            <input id="teamA" type="text" value="Equipo A">
+          </div>
+          <div>
+            <label>Jugador/Equipo B</label>
+            <input id="teamB" type="text" value="Equipo B">
+          </div>
+          <div>
+            <label>Saca primero</label>
+            <select id="firstServer">
+              <option value="A" selected>Equipo A</option>
+              <option value="B">Equipo B</option>
+            </select>
+          </div>
+          <div>
+            <label>Mejor de (sets)</label>
+            <select id="bestOf">
+              <option value="1">1</option>
+              <option value="3" selected>3</option>
+            </select>
+          </div>
+          <div>
+            <label>Tie-break</label>
+            <select id="tieBreakAt">
+              <option value="6-6" selected>En 6-6</option>
+              <option value="5-5">En 5-5 (short set)</option>
+              <option value="none">Sin tie-break</option>
+            </select>
+          </div>
+          <div>
+            <label>Punto de oro (sin ventajas)</label>
+            <select id="noAdvantage">
+              <option value="false" selected>No</option>
+              <option value="true">Sí</option>
+            </select>
+          </div>
+
+          <!-- NUEVO: Cancha -->
+          <div>
+            <label>Cancha</label>
+            <input id="courtName" type="text" placeholder="Cancha 1">
           </div>
         </div>
 
-        <div class="right" style="text-align:right; min-width: 220px;">
-          <div class="muted">Cronómetro: <span class="elapsed">00:00:00</span></div>
-          <div class="muted">Estado: <span class="state">scheduled</span></div>
-          <div class="muted">ID: <span class="matchId">—</span></div>
-          <div class="muted">Actualizado: <span class="updatedAt">—</span></div>
+        <div style="margin-top:12px;" class="wrap">
+          <button id="createBtn">Crear partido</button>
+          <div id="tvUrlWrap" style="display:none;">
+            <div><strong>URL para la TV:</strong> <span id="tvUrl"></span></div>
+            <small class="muted">Abrí esta URL en la pantalla (Smart TV/Chromecast/PC).</small>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel de administración de múltiples partidos -->
+      <section class="controls">
+        <h2>Partidos</h2>
+
+        <!-- Pestañas -->
+        <div class="tabs" id="tabs">
+          <div class="tab active" data-tab="active">Activos</div>
+          <div class="tab" data-tab="history">Histórico</div>
+        </div>
+
+        <!-- Filtros / búsqueda / ordenar -->
+        <div class="filterbar">
+          <input id="searchQ" type="search" placeholder="Buscar por partido o equipos..." />
+          <select id="filterStage">
+            <option value="">Todas las instancias</option>
+          </select>
+          <select id="sortBy">
+            <option value="-createdAt" selected>Más recientes</option>
+            <option value="name">Nombre (A-Z)</option>
+            <option value="-updatedAt">Última actualización</option>
+            <option value="-endedAt">Finalizados (más nuevos)</option>
+          </select>
+          <button id="refreshBtn">Refrescar</button>
+        </div>
+
+        <!-- Listas -->
+        <div id="activeList" class="list"></div>
+        <div id="historyList" class="list" style="display:none;"></div>
+      </section>
+    </div>
+
+    <!-- Template de ítem de partido -->
+    <template id="matchItemTemplate">
+      <div class="card match" data-id="">
+        <div class="row" style="justify-content: space-between; align-items: flex-start; gap: 12px;">
+          <div style="min-width: 260px;">
+            <div class="wrap">
+              <span class="badge stage">Amistoso</span>
+              <span class="badge status">scheduled</span>
+            </div>
+            <div class="match-title">Partido</div>
+            <div class="teams-line">Equipo A vs Equipo B</div>
+            <div class="muted meta">
+              Saca: <span class="serve">Equipo A</span> •
+              Cancha: <span class="court">—</span> •
+              Sets: <span class="sets">0-0</span> •
+              Games: <span class="games">0-0</span> •
+              Points: <span class="points">0-0</span>
+            </div>
+          </div>
+
+          <div class="right" style="text-align:right; min-width: 220px;">
+            <div class="muted">Cronómetro: <span class="elapsed">00:00:00</span></div>
+            <div class="muted">Estado: <span class="state">scheduled</span></div>
+            <div class="muted">ID: <span class="matchId">—</span></div>
+            <div class="muted">Actualizado: <span class="updatedAt">—</span></div>
+          </div>
+        </div>
+
+        <div class="actions wrap" style="margin-top:10px;">
+          <button class="btn btn-open">Abrir TV</button>
+          <button class="btn btn-start">Iniciar</button>
+          <button class="btn btn-pause">Pausar</button>
+          <button class="btn btn-resume">Reanudar</button>
+          <button class="btn btn-a">+1 A</button>
+          <button class="btn btn-b">+1 B</button>
+          <button class="btn btn-reset">Reset game</button>
+          <button class="btn btn-toggle-serve">Cambiar saque</button>
+          <button class="btn btn-finish">Finalizar</button>
+          <button class="btn btn-ads">Publicidad</button>
+          <button class="btn btn-edit">Editar</button>
         </div>
       </div>
+    </template>
 
-      <div class="actions wrap" style="margin-top:10px;">
-        <button class="btn btn-open">Abrir TV</button>
-        <button class="btn btn-start">Iniciar</button>
-        <button class="btn btn-pause">Pausar</button>
-        <button class="btn btn-resume">Reanudar</button>
-        <button class="btn btn-a">+1 A</button>
-        <button class="btn btn-b">+1 B</button>
-        <button class="btn btn-reset">Reset game</button>
-        <button class="btn btn-toggle-serve">Cambiar saque</button>
-        <button class="btn btn-finish">Finalizar</button>
-        <button class="btn btn-ads">Publicidad</button>
-        <button class="btn btn-edit">Editar</button>
+    <!-- Modal simple para editar (nombre/equipos/instancia) -->
+    <div id="editModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 1000;">
+      <div class="card" style="width: min(560px, 92vw);">
+        <h3>Editar partido</h3>
+        <div class="grid-2">
+          <div>
+            <label>Nombre del partido</label>
+            <input id="editName" type="text">
+          </div>
+          <div>
+            <label>Instancia</label>
+            <select id="editStage"></select>
+          </div>
+          <div>
+            <label>Equipo A</label>
+            <input id="editTeamA" type="text">
+          </div>
+          <div>
+            <label>Equipo B</label>
+            <input id="editTeamB" type="text">
+          </div>
+          <div>
+            <label>Cancha</label>
+            <input id="editCourt" type="text">
+          </div>
+        </div>
+        <div class="wrap" style="margin-top: 12px;">
+          <button id="editSaveBtn">Guardar</button>
+          <button id="editCancelBtn" class="btn">Cancelar</button>
+        </div>
       </div>
     </div>
-  </template>
 
-  <!-- Modal simple para editar (nombre/equipos/instancia) -->
-  <div id="editModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 1000;">
-    <div class="card" style="width: min(560px, 92vw);">
-      <h3>Editar partido</h3>
-      <div class="grid-2">
-        <div>
-          <label>Nombre del partido</label>
-          <input id="editName" type="text">
+    <!-- Modal de Publicidad -->
+    <div id="adsModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 1000;">
+      <div class="card" style="width: min(860px, 96vw);">
+        <h3>Publicidad del partido</h3>
+        <div class="wrap" style="align-items:center; gap:12px;">
+          <input id="adsFiles" type="file" accept="image/*" multiple>
+          <button id="adsUploadBtn">Subir imágenes</button>
+          <span class="muted">Formatos: JPG/PNG/WebP • Máx 10MB por imagen</span>
         </div>
-        <div>
-          <label>Instancia</label>
-          <select id="editStage"></select>
+        <div id="adsList" style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;"></div>
+        <div class="wrap" style="margin-top: 12px;">
+          <button id="adsCloseBtn" class="btn">Cerrar</button>
         </div>
-        <div>
-          <label>Equipo A</label>
-          <input id="editTeamA" type="text">
-        </div>
-        <div>
-          <label>Equipo B</label>
-          <input id="editTeamB" type="text">
-        </div>
-        <div>
-          <label>Cancha</label>
-          <input id="editCourt" type="text">
-        </div>
-      </div>
-      <div class="wrap" style="margin-top: 12px;">
-        <button id="editSaveBtn">Guardar</button>
-        <button id="editCancelBtn" class="btn">Cancelar</button>
       </div>
     </div>
   </div>
 
-  <!-- Modal de Publicidad -->
-  <div id="adsModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 1000;">
-    <div class="card" style="width: min(860px, 96vw);">
-      <h3>Publicidad del partido</h3>
-      <div class="wrap" style="align-items:center; gap:12px;">
-        <input id="adsFiles" type="file" accept="image/*" multiple>
-        <button id="adsUploadBtn">Subir imágenes</button>
-        <span class="muted">Formatos: JPG/PNG/WebP • Máx 10MB por imagen</span>
-      </div>
-      <div id="adsList" style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;"></div>
-      <div class="wrap" style="margin-top: 12px;">
-        <button id="adsCloseBtn" class="btn">Cerrar</button>
-      </div>
-    </div>
-  </div>
-
+  <!-- Scripts (se mantiene lo tuyo) -->
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/admin-auth.js"></script>
   <script src="/admin.js"></script>
 </body>
 </html>

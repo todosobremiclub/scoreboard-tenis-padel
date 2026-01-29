@@ -47,9 +47,9 @@ const db = hasDB
   ? new Pool({
       connectionString: DATABASE_URL,
       ssl: { rejectUnauthorized: false },
+      options: '-c search_path=public'
     })
   : null;
-
 const requireDB = (res) => {
   if (!hasDB || !db) {
     res.status(503).json({ error: 'DB no configurada' });

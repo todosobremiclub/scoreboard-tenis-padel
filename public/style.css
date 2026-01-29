@@ -655,3 +655,26 @@ button:disabled{
   }
 }
 
+/* ===== FIX FINAL: Ads banner visible SIEMPRE ===== */
+#adsContainer {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+#adsContainer.ads-large{
+  height: 240px !important;
+  min-height: 240px !important;
+}
+
+#adsContainer .ads-slide.active{
+  display: flex !important;
+}
+
+/* mobile */
+@media (max-width: 900px){
+  #adsContainer.ads-large{
+    height: 170px !important;
+    min-height: 170px !important;
+  }
+}

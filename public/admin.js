@@ -1,8 +1,11 @@
-
 // public/admin.js
+// =========================================================
+// Admin App (Matches + Players + Top Tabs)
+// Mantiene toda tu lógica actual de "Partidos" y agrega "Jugadores".
+// =========================================================
 
 /* ==============================
-   Helpers
+ Helpers
 ============================== */
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -29,7 +32,7 @@ function formatHMS(ms){
 }
 function computeElapsed(state, now = Date.now()){
   // acumulado + (si está corriendo) tramo actual
-  let elapsed = state.accumulatedMs || 0;
+  let elapsed = state.accumulatedMs ?? 0;
   if (state.running) {
     const refStart = state.startedAt ?? now;
     elapsed += (now - refStart);
@@ -38,12 +41,12 @@ function computeElapsed(state, now = Date.now()){
 }
 function mapPointsDisplay(match){
   const set = match.sets[match.sets.length - 1];
-  const tb = set?.tieBreak || {active:false};
+  const tb = set?.tieBreak ?? {active:false};
   if (tb.active) {
     return `${tb.pointsA ?? 0}-${tb.pointsB ?? 0}`;
   }
-  const g = match.currentGame || {pointsA:0, pointsB:0, advantage:null};
-  const toStr = (p) => ['0','15','30','40'][Math.min(p,3)] || '0';
+  const g = match.currentGame ?? {pointsA:0, pointsB:0, advantage:null};
+  const toStr = (p) => ['0','15','30','40'][Math.min(p,3)] ?? '0';
   if (!match.rules?.noAdvantage) {
     // Con ventaja
     if (g.pointsA === 3 && g.pointsB === 3) {
@@ -53,19 +56,20 @@ function mapPointsDisplay(match){
     }
   }
   // Sin ventaja (punto de oro) u otros estados
-  return `${toStr(g.pointsA||0)}-${toStr(g.pointsB||0)}`;
+  return `${toStr(g.pointsA??0)}-${toStr(g.pointsB??0)}`;
 }
 
 /* ==============================
-   State global
+ State global
 ============================== */
 const state = {
+  // Stages (Partidos)
   stages: [
     // fallback; se sobreescribe desde /api/meta/stages
     'Amistoso','Fase de grupos','32vos de final','16vos de final',
     '8vos de final','4tos de final','Semi-Final','Final'
   ],
-  tab: 'active', // 'active' | 'history'
+  tab: 'active', // 'active' | 'history' (tabs internos de Partidos)
   filters: {
     q: '',
     stage: '',
@@ -78,21 +82,33 @@ const state = {
   // Socket único para unir múltiples salas
   socket: null,
   // Timer de cronómetros
-  tickTimer: null
+  tickTimer: null,
+
+  // === Players ===
+  topTab: 'matches',  // 'players' | 'tournaments' | 'matches'
+  players: {
+    list: [],
+    q: '',
+    category: '',
+    limit: 50,
+    offset: 0,
+    editingId: null, // null => creando
+    // cache de categorías (opcional)
+    categories: ['C1','C2','C3','C4','C5','C6','C7','C8','C9','D1','D2','D3','D4','D5','D6','D7','D8','D9']
+  }
 };
 
-
-// --- Publicidad (Ads) ---
+// --- Publicidad (Ads)
 const adsModal = document.querySelector('#adsModal');
 const adsListEl = document.querySelector('#adsList');
 const adsFilesInput = document.querySelector('#adsFiles');
 let adsForId = null;
 
 /* ==============================
-   API wrappers
+ API wrappers
 ============================== */
 async function apiGet(url){
-  const res = await fetch(url);
+  const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -100,6 +116,7 @@ async function apiPost(url, body){
   const res = await fetch(url, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
+    credentials: 'include',
     body: body ? JSON.stringify(body) : undefined
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -109,18 +126,23 @@ async function apiPatch(url, body){
   const res = await fetch(url, {
     method: 'PATCH',
     headers: {'Content-Type':'application/json'},
+    credentials: 'include',
     body: JSON.stringify(body)
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
+async function apiDelete(url){
+  const res = await fetch(url, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  try { return await res.json(); } catch { return { ok: true }; }
+}
 
 /* ==============================
-   Socket.IO (un solo socket; múltiples salas)
+ Socket.IO (un solo socket; múltiples salas)
 ============================== */
 function ensureSocket(){
   if (state.socket) return state.socket;
-
   const socket = io(originBase, { transports: ['websocket'] });
   socket.on('connect', () => {
     // Reunirnos a todas las salas activas (por si recargamos)
@@ -137,7 +159,6 @@ function ensureSocket(){
     // Para evitar demasiadas llamadas, hacemos un refresh suave
     refreshLists();
   });
-
   state.socket = socket;
   return socket;
 }
@@ -146,13 +167,13 @@ function joinRoom(matchId){
 }
 
 /* ==============================
-   Renderizado de listas y tarjetas
+ Renderizado de listas y tarjetas (Partidos)
 ============================== */
 function clearContainer(el){
   while (el.firstChild) el.removeChild(el.firstChild);
 }
-
 function fillStagesSelect(selectEl, withAllOption=false){
+  if (!selectEl) return;
   if (withAllOption) {
     // Mantener la primera opción "Todas las instancias"
     const keepFirst = selectEl.querySelector('option[value=""]');
@@ -168,7 +189,6 @@ function fillStagesSelect(selectEl, withAllOption=false){
     selectEl.appendChild(opt);
   });
 }
-
 function buildQuery(base, { status, stage, q, sort }){
   const params = new URLSearchParams();
   if (status) params.set('status', status);
@@ -177,28 +197,23 @@ function buildQuery(base, { status, stage, q, sort }){
   if (sort) params.set('sort', sort);
   return `${base}?${params.toString()}`;
 }
-
 function renderLists(activeData, historyData){
   const activeList = $('#activeList');
   const historyList = $('#historyList');
   clearContainer(activeList);
   clearContainer(historyList);
-
   // Render Activos
-  (activeData?.active || []).forEach(m => {
+  (activeData?.active ?? []).forEach(m => {
     const el = renderMatchItem(m, /*isHistory*/false);
     activeList.appendChild(el);
   });
-
   // Render Histórico
-  (historyData?.finished || []).forEach(m => {
+  (historyData?.finished ?? []).forEach(m => {
     const el = renderMatchItem(m, /*isHistory*/true);
     historyList.appendChild(el);
   });
-
   // Después de poblar listas, unir salas activas
-  (activeData?.active || []).forEach(m => joinRoom(m.id));
-
+  (activeData?.active ?? []).forEach(m => joinRoom(m.id));
   // Actualizar mapa de elementos (para updates puntuales)
   state.elements.clear();
   $$('#activeList .match, #historyList .match').forEach(card => {
@@ -206,15 +221,12 @@ function renderLists(activeData, historyData){
     state.elements.set(id, card);
   });
 }
-
 function renderMatchItem(match, isHistory){
   // Guardar el último estado
   state.byId.set(match.id, match);
-
   const tpl = $('#matchItemTemplate');
   const node = tpl.content.firstElementChild.cloneNode(true);
   node.dataset.id = match.id;
-
   // Referencias
   const badgeStage = node.querySelector('.badge.stage');
   const badgeStatus = node.querySelector('.badge.status');
@@ -224,12 +236,10 @@ function renderMatchItem(match, isHistory){
   const metaSets = node.querySelector('.meta .sets');
   const metaGames = node.querySelector('.meta .games');
   const metaPoints = node.querySelector('.meta .points');
-
   const elapsedEl = node.querySelector('.elapsed');
   const stateEl = node.querySelector('.state');
   const idEl = node.querySelector('.matchId');
   const updatedEl = node.querySelector('.updatedAt');
-
   // Botones
   const btnOpen = node.querySelector('.btn-open');
   const btnStart = node.querySelector('.btn-start');
@@ -241,25 +251,23 @@ function renderMatchItem(match, isHistory){
   const btnToggle = node.querySelector('.btn-toggle-serve');
   const btnFinish = node.querySelector('.btn-finish');
   const btnEdit = node.querySelector('.btn-edit');
-  
-const btnAds = node.querySelector('.btn-ads');
-btnAds.addEventListener('click', () => openAdsModal(match.id));
+  const btnAds = node.querySelector('.btn-ads');
+  const btnDelete = node.querySelector('.btn-delete');
 
+  btnAds.addEventListener('click', () => openAdsModal(match.id));
 
   // Contenido
-  badgeStage.textContent = match.stage || 'Amistoso';
-  badgeStatus.textContent = match.status || 'scheduled';
-  title.textContent = match.name || 'Partido';
-  teamsLine.textContent = `${match.teams?.[0]?.name || 'Equipo A'} vs ${match.teams?.[1]?.name || 'Equipo B'}`;
-  metaServe.textContent = match.teams?.[match.serverIndex]?.name || '—';
-
-  const set = match.sets[match.sets.length - 1] || {gamesA:0, gamesB:0, tieBreak:{active:false}};
-  metaSets.textContent = `${match.setsWonA||0}-${match.setsWonB||0}`;
-  metaGames.textContent = `${set.gamesA||0}-${set.gamesB||0}`;
+  badgeStage.textContent = match.stage ?? 'Amistoso';
+  badgeStatus.textContent = match.status ?? 'scheduled';
+  title.textContent = match.name ?? 'Partido';
+  teamsLine.textContent = `${match.teams?.[0]?.name ?? 'Equipo A'} vs ${match.teams?.[1]?.name ?? 'Equipo B'}`;
+  metaServe.textContent = match.teams?.[match.serverIndex]?.name ?? '—';
+  const set = match.sets[match.sets.length - 1] ?? {gamesA:0, gamesB:0, tieBreak:{active:false}};
+  metaSets.textContent = `${match.setsWonA??0}-${match.setsWonB??0}`;
+  metaGames.textContent = `${set.gamesA??0}-${set.gamesB??0}`;
   metaPoints.textContent = mapPointsDisplay(match);
-
   elapsedEl.textContent = formatHMS(computeElapsed(match));
-  stateEl.textContent = match.status || (match.running ? 'running' : 'scheduled');
+  stateEl.textContent = match.status ?? (match.running ? 'running' : 'scheduled');
   idEl.textContent = match.id;
   updatedEl.textContent = formatDateTime(match.updatedAt);
 
@@ -275,7 +283,6 @@ btnAds.addEventListener('click', () => openAdsModal(match.id));
   btnToggle.disabled = finished;
   btnFinish.disabled = finished;
   btnEdit.disabled = finished; // histórico no editable
-
   if (isHistory) {
     // En histórico, forzamos deshabilitados (salvo abrir TV)
     btnStart.disabled = true;
@@ -289,7 +296,7 @@ btnAds.addEventListener('click', () => openAdsModal(match.id));
     btnEdit.disabled = true;
   }
 
-  // Eventos
+  // Eventos (Partidos)
   btnOpen.addEventListener('click', () => {
     const url = `${originBase}/display.html?match=${match.id}`;
     window.open(url, '_blank');
@@ -308,7 +315,6 @@ btnAds.addEventListener('click', () => openAdsModal(match.id));
   });
   btnA.addEventListener('click', async () => {
     await apiPost(`/api/matches/${match.id}/point/A`);
-    // socket actualizará; por si acaso:
     softRefreshMatch(match.id);
   });
   btnB.addEventListener('click', async () => {
@@ -330,9 +336,27 @@ btnAds.addEventListener('click', () => openAdsModal(match.id));
   });
   btnEdit.addEventListener('click', () => openEditModal(match.id));
 
+  if (btnDelete){
+    btnDelete.addEventListener('click', async () => {
+      const ok = confirm('¿Eliminar este partido? Se borrará definitivamente (activos/históricos) y sus publicidades.');
+      if (!ok) return;
+      try {
+        const r = await fetch(`/api/matches/${match.id}?deleteAds=1`, { method: 'DELETE', credentials: 'include' });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          alert(data.error ?? 'No se pudo eliminar');
+          return;
+        }
+        // remover del DOM
+        node.remove();
+      } catch (e) {
+        alert('Error de red al eliminar');
+      }
+    });
+  }
+
   return node;
 }
-
 // Actualiza SOLO la tarjeta de un match ya renderizado
 function updateMatchCard(matchId){
   const card = state.elements.get(matchId);
@@ -348,50 +372,21 @@ function updateMatchCard(matchId){
   const metaSets = card.querySelector('.meta .sets');
   const metaGames = card.querySelector('.meta .games');
   const metaPoints = card.querySelector('.meta .points');
-
   const elapsedEl = card.querySelector('.elapsed');
   const stateEl = card.querySelector('.state');
   const updatedEl = card.querySelector('.updatedAt');
 
-const btnDelete = card.querySelector('.btn-delete');
-if (btnDelete) {
-  btnDelete.addEventListener('click', async () => {
-    const ok = confirm('¿Eliminar este partido? Se borrará definitivamente (activos/históricos) y sus publicidades.');
-    if (!ok) return;
-
-    try {
-      const r = await fetch(`/api/matches/${matchId}?deleteAds=1`, { method: 'DELETE' });
-      const data = await r.json().catch(() => ({}));
-
-      if (!r.ok) {
-        alert(data.error || 'No se pudo eliminar');
-        return;
-      }
-
-      // opción A: remover del DOM
-      card.remove();
-
-      // opción B: refrescar listas (si tenés función)
-      // await refreshLists();
-    } catch (e) {
-      alert('Error de red al eliminar');
-    }
-  });
-}
-
   // Actualizar textos
-  badgeStatus.textContent = match.status || (match.running ? 'running' : 'scheduled');
-  title.textContent = match.name || 'Partido';
-  teamsLine.textContent = `${match.teams?.[0]?.name || 'Equipo A'} vs ${match.teams?.[1]?.name || 'Equipo B'}`;
-  metaServe.textContent = match.teams?.[match.serverIndex]?.name || '—';
-
-  const set = match.sets[match.sets.length - 1] || {gamesA:0, gamesB:0, tieBreak:{active:false}};
-  metaSets.textContent = `${match.setsWonA||0}-${match.setsWonB||0}`;
-  metaGames.textContent = `${set.gamesA||0}-${set.gamesB||0}`;
+  badgeStatus.textContent = match.status ?? (match.running ? 'running' : 'scheduled');
+  title.textContent = match.name ?? 'Partido';
+  teamsLine.textContent = `${match.teams?.[0]?.name ?? 'Equipo A'} vs ${match.teams?.[1]?.name ?? 'Equipo B'}`;
+  metaServe.textContent = match.teams?.[match.serverIndex]?.name ?? '—';
+  const set = match.sets[match.sets.length - 1] ?? {gamesA:0, gamesB:0, tieBreak:{active:false}};
+  metaSets.textContent = `${match.setsWonA??0}-${match.setsWonB??0}`;
+  metaGames.textContent = `${set.gamesA??0}-${set.gamesB??0}`;
   metaPoints.textContent = mapPointsDisplay(match);
-
   elapsedEl.textContent = formatHMS(computeElapsed(match));
-  stateEl.textContent = match.status || (match.running ? 'running' : 'scheduled');
+  stateEl.textContent = match.status ?? (match.running ? 'running' : 'scheduled');
   updatedEl.textContent = formatDateTime(match.updatedAt);
 
   // Estados de botones
@@ -418,7 +413,7 @@ if (btnDelete) {
 }
 
 /* ==============================
-   Carga de datos (listas, stages)
+ Carga de datos (Partidos)
 ============================== */
 async function loadStages(){
   try {
@@ -434,7 +429,6 @@ async function loadStages(){
   fillStagesSelect($('#filterStage'), /*withAllOption*/true); // filtro (mantiene "todas")
   // Para el modal de edición se llena on-demand
 }
-
 async function loadActive(){
   const url = buildQuery('/api/matches', {
     status: 'active',
@@ -453,7 +447,6 @@ async function loadHistory(){
   });
   return apiGet(url);
 }
-
 async function refreshLists(){
   try {
     const [activeData, historyData] = await Promise.all([
@@ -465,7 +458,6 @@ async function refreshLists(){
     console.error('Error al refrescar listas', e);
   }
 }
-
 async function softRefreshMatch(id){
   // Obtener el estado por REST solo de ese id y refrescar tarjeta
   try {
@@ -478,21 +470,19 @@ async function softRefreshMatch(id){
 }
 
 /* ==============================
-   Crear partido
+ Crear partido
 ============================== */
 function showTvUrl(id){
   const tvUrl = `${originBase}/display.html?match=${id}`;
   $('#tvUrl').textContent = tvUrl;
   $('#tvUrlWrap').style.display = 'block';
 }
-
-
 async function onCreateMatch(){
   try {
     const body = {
-      name: $('#matchName').value.trim() || 'Partido',
-      teamA: $('#teamA').value.trim() || 'Equipo A',
-      teamB: $('#teamB').value.trim() || 'Equipo B',
+      name: $('#matchName').value.trim() ?? 'Partido',
+      teamA: $('#teamA').value.trim() ?? 'Equipo A',
+      teamB: $('#teamB').value.trim() ?? 'Equipo B',
       firstServer: $('#firstServer').value, // 'A' o 'B'
       stage: $('#matchStage').value,
       courtName: $('#courtName').value.trim(), // ← IMPORTANTE: enviar la cancha
@@ -503,15 +493,9 @@ async function onCreateMatch(){
         noAdvantage: $('#noAdvantage').value === 'true'
       }
     };
-
-    // (Opcional) logs de diagnóstico durante las pruebas
-    console.log('CLICK CREAR PARTIDO OK');
-    console.log('PAYLOAD CREATE', body);
-
     const { id } = await apiPost('/api/matches', body);
     if (id) {
       showTvUrl(id);
-      // Actualizamos listas y nos unimos a la sala del match nuevo
       await refreshLists();
       joinRoom(id);
     }
@@ -522,7 +506,7 @@ async function onCreateMatch(){
 }
 
 /* ==============================
-   Tabs / Filtros / Búsqueda
+ Tabs / Filtros / Búsqueda (Partidos internos)
 ============================== */
 function setTab(tab){
   state.tab = tab; // 'active' | 'history'
@@ -530,10 +514,9 @@ function setTab(tab){
   $('#activeList').style.display = tab === 'active' ? '' : 'none';
   $('#historyList').style.display = tab === 'history' ? '' : 'none';
 }
-
 let searchDebounce = null;
 function onSearchInput(ev){
-  const q = ev.target.value || '';
+  const q = ev.target.value ?? '';
   if (searchDebounce) clearTimeout(searchDebounce);
   searchDebounce = setTimeout(() => {
     state.filters.q = q.trim();
@@ -541,47 +524,38 @@ function onSearchInput(ev){
   }, 350);
 }
 function onFilterStage(ev){
-  state.filters.stage = ev.target.value || '';
+  state.filters.stage = ev.target.value ?? '';
   refreshLists();
 }
 function onSortChange(ev){
-  state.filters.sort = ev.target.value || '-createdAt';
+  state.filters.sort = ev.target.value ?? '-createdAt';
   refreshLists();
 }
 
 /* ==============================
-   Editar partido (modal)
+ Editar partido (modal)
 ============================== */
 const editModal = $('#editModal');
 let editingId = null;
-
-
 function openEditModal(matchId){
   const m = state.byId.get(matchId);
   if (!m) return;
-
   editingId = matchId;
-
   // Poblar campos
-  $('#editName').value = m.name || '';
-  $('#editTeamA').value = m.teams?.[0]?.name || '';
-  $('#editTeamB').value = m.teams?.[1]?.name || '';
-  $('#editCourt').value = m.courtName || '';   // ← AÑADIR ESTA LÍNEA
-
+  $('#editName').value = m.name ?? '';
+  $('#editTeamA').value = m.teams?.[0]?.name ?? '';
+  $('#editTeamB').value = m.teams?.[1]?.name ?? '';
+  $('#editCourt').value = m.courtName ?? '';
   // Poblar instancias
   const editStageSelect = $('#editStage');
   if (!editStageSelect.options.length) fillStagesSelect(editStageSelect, false);
-  editStageSelect.value = m.stage || 'Amistoso';
-
+  editStageSelect.value = m.stage ?? 'Amistoso';
   editModal.style.display = 'flex';
 }
-
 function closeEditModal(){
   editModal.style.display = 'none';
   editingId = null;
 }
-
-
 async function onEditSave(){
   if (!editingId) return;
   try {
@@ -590,7 +564,7 @@ async function onEditSave(){
       teamA: $('#editTeamA').value.trim(),
       teamB: $('#editTeamB').value.trim(),
       stage: $('#editStage').value,
-      courtName: $('#editCourt').value.trim()   // ← NUEVO
+      courtName: $('#editCourt').value.trim()
     });
     closeEditModal();
     await refreshLists();
@@ -601,7 +575,7 @@ async function onEditSave(){
 }
 
 /* ==============================
-   Tick de cronómetros en listado
+ Tick de cronómetros en listado
 ============================== */
 function startTicker(){
   if (state.tickTimer) clearInterval(state.tickTimer);
@@ -618,45 +592,256 @@ function startTicker(){
   }, 1000);
 }
 
+/* =========================================================
+ Jugadores (Players)
+========================================================= */
+// Helpers
+function parseBirthToMs(val){
+  // val viene yyyy-mm-dd => ms (local TZ)
+  if (!val) return null;
+  const ms = Date.parse(val);
+  return Number.isNaN(ms) ? null : ms;
+}
+function calcAgeFromMs(ms){
+  if (!ms) return '';
+  const d = new Date(ms);
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
+
+// Render de listado de jugadores
+function renderPlayersList(players){
+  const list = $('#playersList');
+  list.innerHTML = '';
+  if (!players || !players.length) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'No hay jugadores (o no coinciden con el filtro).';
+    list.appendChild(empty);
+    return;
+  }
+  players.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.padding = '10px';
+    const fullName = `${p.last_name ?? ''}, ${p.first_name ?? ''}`.trim();
+    const birthStr = p.birthdate ? new Date(Number(p.birthdate)).toLocaleDateString() : '—';
+    const ageStr = (p.age ?? '') === '' ? '—' : String(p.age ?? '—');
+    const cat = p.category ?? '—';
+    const phone = p.phone ?? '—';
+    const dni = p.dni ?? '—';
+    const active = p.active !== false;
+
+    card.innerHTML = `
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+        <div style="min-width:260px;">
+          <div><strong>${fullName}</strong></div>
+          <div class="muted">DNI: ${dni} • Tel: ${phone}</div>
+          <div class="muted">Nac: ${birthStr} • Edad: ${ageStr} • Cat: ${cat}</div>
+          <div class="muted">ID: ${p.id}</div>
+        </div>
+        <div class="right">
+          <span class="badge">${active ? 'Activo' : 'Inactivo'}</span>
+        </div>
+      </div>
+      <div class="actions wrap" style="margin-top:8px;">
+        <button class="btn btn-pl-edit">Editar</button>
+        <button class="btn btn-pl-del">Desactivar</button>
+      </div>
+    `;
+
+    // wire actions
+    card.querySelector('.btn-pl-edit').addEventListener('click', () => {
+      // Setear edición en el form
+      state.players.editingId = p.id;
+      $('#pl_first').value = p.first_name ?? '';
+      $('#pl_last').value  = p.last_name ?? '';
+      $('#pl_dni').value   = p.dni ?? '';
+      $('#pl_tel').value   = p.phone ?? '';
+      // Birthdate -> yyyy-mm-dd
+      if (p.birthdate) {
+        const dt = new Date(Number(p.birthdate));
+        const y = dt.getFullYear();
+        const m = two(dt.getMonth()+1);
+        const d = two(dt.getDate());
+        $('#pl_birth').value = `${y}-${m}-${d}`;
+      } else {
+        $('#pl_birth').value = '';
+      }
+      $('#pl_age').value   = p.age ?? '';
+      $('#pl_cat').value   = p.category ?? '';
+      // Cambiamos texto del botón
+      $('#pl_save').textContent = 'Guardar cambios';
+      // Scroll al form
+      document.getElementById('playersSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    card.querySelector('.btn-pl-del').addEventListener('click', async () => {
+      if (!confirm('¿Desactivar este jugador?')) return;
+      try {
+        await apiDelete(`/api/players/${p.id}`);
+        await loadPlayers(); // refresco
+      } catch (e) {
+        alert('No se pudo desactivar');
+      }
+    });
+
+    list.appendChild(card);
+  });
+}
+
+async function loadPlayers(){
+  const params = new URLSearchParams();
+  if (state.players.q) params.set('q', state.players.q);
+  if (state.players.category) params.set('category', state.players.category);
+  params.set('active', 'true');
+  params.set('limit', String(state.players.limit));
+  params.set('offset', String(state.players.offset));
+  // sort default -created_at
+  params.set('sort', '-created_at');
+
+  try {
+    const { players } = await apiGet(`/api/players?${params.toString()}`);
+    state.players.list = players ?? [];
+    renderPlayersList(state.players.list);
+  } catch (e) {
+    console.error('No se pudo cargar jugadores', e);
+    renderPlayersList([]);
+  }
+}
+
+function onPlayerBirthChange(){
+  const ms = parseBirthToMs($('#pl_birth').value);
+  const age = calcAgeFromMs(ms);
+  $('#pl_age').value = age === '' ? '' : String(age);
+}
+
+async function savePlayer(){
+  const payload = {
+    first_name: $('#pl_first').value.trim(),
+    last_name:  $('#pl_last').value.trim(),
+    dni:        $('#pl_dni').value.trim(),
+    phone:      $('#pl_tel').value.trim(),
+    birthdate:  parseBirthToMs($('#pl_birth').value),
+    category:   $('#pl_cat').value
+  };
+
+  if (!payload.first_name || !payload.last_name) {
+    alert('Nombre y Apellido son requeridos');
+    return;
+  }
+
+  try {
+    if (!state.players.editingId) {
+      // Crear
+      await apiPost('/api/players', payload);
+      clearPlayerForm();
+    } else {
+      // Editar
+      await apiPatch(`/api/players/${state.players.editingId}`, payload);
+      clearPlayerForm();
+    }
+    await loadPlayers();
+  } catch (e) {
+    alert('No se pudo guardar el jugador');
+    console.error(e);
+  }
+}
+
+function clearPlayerForm(){
+  state.players.editingId = null;
+  $('#pl_first').value = '';
+  $('#pl_last').value  = '';
+  $('#pl_dni').value   = '';
+  $('#pl_tel').value   = '';
+  $('#pl_birth').value = '';
+  $('#pl_age').value   = '';
+  $('#pl_cat').value   = '';
+  $('#pl_save').textContent = 'Guardar jugador';
+}
+
+let playersSearchDebounce = null;
+function onPlayersSearch(ev){
+  const q = ev.target.value ?? '';
+  if (playersSearchDebounce) clearTimeout(playersSearchDebounce);
+  playersSearchDebounce = setTimeout(() => {
+    state.players.q = q.trim();
+    loadPlayers();
+  }, 350);
+}
+function onPlayersFilterCat(ev){
+  state.players.category = ev.target.value ?? '';
+  loadPlayers();
+}
+
+/* =========================================================
+ Top Tabs (Jugadores / Torneos / Partidos)
+========================================================= */
+function activateTopTab(name){
+  state.topTab = name;
+  $$('.top-tab').forEach(t => t.classList.toggle('active', t.dataset.top === name));
+  const sections = {
+    players: document.getElementById('playersSection'),
+    tournaments: document.getElementById('tournamentsSection'),
+    matches: document.getElementById('matchesSection'),
+  };
+  Object.entries(sections).forEach(([k,el]) => el?.classList.toggle('active', k === name));
+}
+function bindTopTabs(){
+  const topTabs = document.getElementById('topTabs');
+  if (!topTabs) return;
+  topTabs.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.top-tab');
+    if (!btn) return;
+    activateTopTab(btn.dataset.top);
+    // on change, si voy a jugadores => refresco
+    if (btn.dataset.top === 'players') loadPlayers();
+  });
+  // por defecto matches
+  activateTopTab('matches');
+}
+
 /* ==============================
-   Bootstrap
+ Bootstrap
 ============================== */
 function bindUI(){
-  // Tabs
-  $('#tabs').addEventListener('click', (ev) => {
+  // === Top Tabs (nuevas)
+  bindTopTabs();
+
+  // === Partidos
+  // Tabs internos
+  $('#tabs')?.addEventListener('click', (ev) => {
     const tab = ev.target.closest('.tab');
     if (!tab) return;
     setTab(tab.dataset.tab);
   });
-
   // Filtros
-  $('#searchQ').addEventListener('input', onSearchInput);
-  $('#filterStage').addEventListener('change', onFilterStage);
-  $('#sortBy').addEventListener('change', onSortChange);
-  $('#refreshBtn').addEventListener('click', refreshLists);
-
+  $('#searchQ')?.addEventListener('input', onSearchInput);
+  $('#filterStage')?.addEventListener('change', onFilterStage);
+  $('#sortBy')?.addEventListener('change', onSortChange);
+  $('#refreshBtn')?.addEventListener('click', refreshLists);
   // Crear partido
-  $('#createBtn').addEventListener('click', onCreateMatch);
+  $('#createBtn')?.addEventListener('click', onCreateMatch);
+  // Modal partidos
+  $('#editSaveBtn')?.addEventListener('click', onEditSave);
+  $('#editCancelBtn')?.addEventListener('click', closeEditModal);
+  // Modal Ads
+  $('#adsUploadBtn')?.addEventListener('click', uploadAdsForMatch);
+  $('#adsCloseBtn')?.addEventListener('click', closeAdsModal);
+  // Cerrar adsModal clickeando el fondo
+  adsModal?.addEventListener('click', (ev) => { if (ev.target === adsModal) closeAdsModal(); });
+  // Cerrar modal partidos clickeando fuera
+  editModal?.addEventListener('click', (ev) => { if (ev.target === editModal) closeEditModal(); });
 
-  // Modal
-  $('#editSaveBtn').addEventListener('click', onEditSave);
-  $('#editCancelBtn').addEventListener('click', closeEditModal);
-
-  
-// Modal de Publicidad
-document.querySelector('#adsUploadBtn').addEventListener('click', uploadAdsForMatch);
-document.querySelector('#adsCloseBtn').addEventListener('click', closeAdsModal);
-
-// Cerrar adsModal clickeando el fondo
-adsModal.addEventListener('click', (ev) => {
-  if (ev.target === adsModal) closeAdsModal();
-});
-
-
-  // Cerrar modal clickeando fuera
-  editModal.addEventListener('click', (ev) => {
-    if (ev.target === editModal) closeEditModal();
-  });
+  // === Jugadores
+  $('#pl_birth')?.addEventListener('change', onPlayerBirthChange);
+  $('#pl_q')?.addEventListener('input', onPlayersSearch);
+  $('#pl_filter_cat')?.addEventListener('change', onPlayersFilterCat);
+  $('#pl_refreshBtn')?.addEventListener('click', loadPlayers);
+  $('#pl_save')?.addEventListener('click', savePlayer);
 }
 
 async function bootstrap(){
@@ -666,32 +851,35 @@ async function bootstrap(){
   setTab('active');
   ensureSocket();
   startTicker();
+
+  // Cargar jugadores si la pestaña actual es players (no lo es por defecto)
+  // pero si querés precargar la data, descomentá la siguiente línea:
+  // await loadPlayers();
 }
 
-
+/* =========================================================
+ Ads modal helpers
+========================================================= */
 async function openAdsModal(matchId){
   adsForId = matchId;
   if (adsFilesInput) adsFilesInput.value = '';
   await refreshAdsList();
   adsModal.style.display = 'flex';
 }
-
 function closeAdsModal(){
   adsModal.style.display = 'none';
   adsForId = null;
 }
-
 async function refreshAdsList(){
   if (!adsForId) return;
   try {
     const { urls } = await apiGet(`/api/matches/${adsForId}/ads`);
-    renderAdsGrid(urls || []);
+    renderAdsGrid(urls ?? []);
   } catch (e) {
     console.error('No se pudo cargar publicidad', e);
     renderAdsGrid([]);
   }
 }
-
 function renderAdsGrid(urls){
   adsListEl.innerHTML = '';
   if (!urls.length) {
@@ -710,20 +898,17 @@ function renderAdsGrid(urls){
     cell.style.display = 'flex';
     cell.style.flexDirection = 'column';
     cell.style.gap = '6px';
-
     const img = document.createElement('img');
     img.src = url;
     img.alt = 'Publicidad';
     img.style.width = '100%';
     img.style.maxHeight = '120px';
     img.style.objectFit = 'contain';
-
     const row = document.createElement('div');
     row.style.display = 'flex';
     row.style.justifyContent = 'space-between';
     row.style.alignItems = 'center';
     row.style.gap = '8px';
-
     const urlSmall = document.createElement('small');
     urlSmall.className = 'muted';
     urlSmall.style.display = 'inline-block';
@@ -732,7 +917,6 @@ function renderAdsGrid(urls){
     urlSmall.style.textOverflow = 'ellipsis';
     urlSmall.title = url;
     urlSmall.textContent = url;
-
     const del = document.createElement('button');
     del.className = 'btn';
     del.textContent = 'Eliminar';
@@ -740,8 +924,8 @@ function renderAdsGrid(urls){
       if (!confirm('¿Eliminar esta imagen?')) return;
       await apiDeleteAd(adsForId, url);
       await refreshAdsList();
+      await softRefreshMatch(adsForId);
     });
-
     row.appendChild(urlSmall);
     row.appendChild(del);
     cell.appendChild(img);
@@ -749,7 +933,6 @@ function renderAdsGrid(urls){
     adsListEl.appendChild(cell);
   });
 }
-
 async function uploadAdsForMatch(){
   if (!adsForId) return;
   const files = adsFilesInput.files;
@@ -762,10 +945,11 @@ async function uploadAdsForMatch(){
   try {
     const res = await fetch(`/api/matches/${adsForId}/ads`, {
       method: 'POST',
-      body: fd
+      body: fd,
+      credentials: 'include'
     });
     if (!res.ok) {
-      const txt = await res.text().catch(()=>'');
+      const txt = await res.text().catch(()=> '');
       console.error('Upload error:', res.status, txt);
       alert('No se pudieron subir las imágenes.');
       return;
@@ -777,14 +961,14 @@ async function uploadAdsForMatch(){
     alert('Error de red al subir imágenes.');
   }
 }
-
 async function apiDeleteAd(matchId, url){
   const res = await fetch(`/api/matches/${matchId}/ads?` + new URLSearchParams({ url }), {
-    method: 'DELETE'
+    method: 'DELETE',
+    credentials: 'include'
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 
-
+// Go!
 bootstrap();

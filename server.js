@@ -79,6 +79,12 @@ const MATCH_STAGES = [
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 ensureDir(UPLOADS_DIR);
 
+
+// Categorías para jugadores (C1..C9, D1..D9)
+const PLAYER_CATEGORIES = [
+  'C1','C2','C3','C4','C5','C6','C7','C8','C9',
+  'D1','D2','D3','D4','D5','D6','D7','D8','D9'
+];
 // =========================================================
 // Subidas (Multer) - Publicidad
 // =========================================================
@@ -1107,6 +1113,206 @@ app.delete('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (
     console.error('[superadmin delete user]', e);
     res.status(500).json({ error: 'Error del servidor' });
   }
+});
+
+// Permite roles: admin, staff, superadmin
+function requireAdminOrStaff(req, res, next) {
+  const role = req.user?.role;
+  if (!role || !['admin','staff','superadmin'].includes(role)) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+  next();
+}
+
+// Calcula edad a partir de birthdate (ms epoch)
+function calcAge(birthMs) {
+  if (!birthMs) return null;
+  const d = new Date(Number(birthMs));
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
+
+// =========================================================
+// Players (REST)
+// =========================================================
+
+/**
+ * GET /api/players
+ * Query params:
+ *  - q: filtra por nombre, apellido, dni o teléfono
+ *  - category: C1..C9, D1..D9
+ *  - active: 'true'|'false' (default 'true')
+ *  - limit (max 200), offset
+ *  - sort: '-created_at' | 'last_name' | '-updated_at'
+ */
+app.get('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const q = String(req.query.q ?? '').trim().toLowerCase();
+    const category = String(req.query.category ?? '').trim().toUpperCase();
+    const onlyActive = String(req.query.active ?? 'true') === 'true';
+    const limit = Math.min(parseInt(req.query.limit ?? '50', 10), 200);
+    const offset = Math.max(parseInt(req.query.offset ?? '0', 10), 0);
+    const sort = String(req.query.sort ?? '-created_at');
+
+    const fieldsMap = {
+      'last_name': 'last_name ASC, first_name ASC',
+      '-updated_at': 'updated_at DESC',
+      '-created_at': 'created_at DESC',
+    };
+    const orderBy = fieldsMap[sort] ?? 'created_at DESC';
+
+    const where = [];
+    const params = [];
+    if (onlyActive) {
+      params.push(true);
+      where.push(`active = $${params.length}`);
+    }
+    if (q) {
+      params.push(`%${q}%`);
+      const p = `$${params.length}`;
+      where.push(`(lower(first_name) LIKE ${p} OR lower(last_name) LIKE ${p} OR lower(dni) LIKE ${p} OR lower(phone) LIKE ${p})`);
+    }
+    if (category && PLAYER_CATEGORIES.includes(category)) {
+      params.push(category);
+      where.push(`category = $${params.length}`);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    params.push(limit, offset);
+
+    const sql = `
+      SELECT id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at
+      FROM players
+      ${whereSql}
+      ORDER BY ${orderBy}
+      LIMIT $${params.length-1} OFFSET $${params.length}
+    `;
+    const { rows } = await db.query(sql, params);
+    return res.json({ players: rows, limit, offset });
+  } catch (e) {
+    console.error('[players list] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+/**
+ * POST /api/players
+ * body: { first_name, last_name, dni?, phone?, birthdate?(ms), category }
+ */
+app.post('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const { first_name = '', last_name = '', dni = '', phone = '', birthdate = null, category = '' } = req.body ?? {};
+    const fn = String(first_name).trim();
+    const ln = String(last_name).trim();
+    const cat = String(category).toUpperCase().trim();
+    if (!fn || !ln) return res.status(400).json({ error: 'Nombre y apellido son requeridos' });
+    if (cat && !PLAYER_CATEGORIES.includes(cat)) return res.status(400).json({ error: 'Categoría inválida' });
+
+    const now = Date.now();
+    const id = `p_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+    const bms = birthdate == null ? null : Number(birthdate);
+    const age = bms ? calcAge(bms) : null;
+
+    const sql = `
+      INSERT INTO players (id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9)
+      RETURNING id
+    `;
+    const { rows } = await db.query(sql, [id, fn, ln, dni || null, phone || null, bms, age, cat || null, now]);
+    return res.status(201).json({ id: rows[0]?.id });
+  } catch (e) {
+    console.error('[players create] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+/**
+ * PATCH /api/players/:id
+ * body: { first_name?, last_name?, dni?, phone?, birthdate?(ms) , category?, active? }
+ */
+app.patch('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const id = String(req.params.id);
+    const { first_name, last_name, dni, phone, birthdate, category, active } = req.body ?? {};
+
+    const fields = [];
+    const params = [];
+
+    if (typeof first_name === 'string') { fields.push(`first_name = $${fields.length+1}`); params.push(first_name.trim()); }
+    if (typeof last_name  === 'string') { fields.push(`last_name = $${fields.length+1}`);  params.push(last_name.trim());  }
+    if (typeof dni        === 'string') { fields.push(`dni = $${fields.length+1}`);        params.push(dni.trim() || null); }
+    if (typeof phone      === 'string') { fields.push(`phone = $${fields.length+1}`);      params.push(phone.trim() || null); }
+
+    // birthdate y age
+    let setAgeFromBirth = false;
+    if (birthdate != null) {
+      const bms = Number(birthdate);
+      fields.push(`birthdate = $${fields.length+1}`); params.push(Number.isNaN(bms) ? null : bms);
+      setAgeFromBirth = true;
+    }
+    if (typeof category === 'string') {
+      const cat = category.toUpperCase().trim();
+      if (cat && !PLAYER_CATEGORIES.includes(cat)) return res.status(400).json({ error: 'Categoría inválida' });
+      fields.push(`category = $${fields.length+1}`); params.push(cat || null);
+    }
+    if (typeof active === 'boolean') {
+      fields.push(`active = $${fields.length+1}`); params.push(active);
+    }
+    if (!fields.length) return res.json({ ok: true });
+
+    // updated_at
+    fields.push(`updated_at = $${fields.length+1}`); params.push(Date.now());
+    params.push(id);
+
+    // Si cambiamos birthdate, recalculamos age en la misma actualización
+    let sql = `UPDATE players SET ${fields.join(', ')} WHERE id = $${params.length}`;
+    if (setAgeFromBirth) {
+      sql += ` RETURNING birthdate`;
+      const { rows } = await db.query(sql, params);
+      if (rows && rows[0]) {
+        const newBirth = rows[0].birthdate;
+        const newAge = newBirth ? calcAge(newBirth) : null;
+        await db.query(`UPDATE players SET age=$1, updated_at=$2 WHERE id=$3`, [newAge, Date.now(), id]);
+      }
+      return res.json({ ok: true });
+    } else {
+      await db.query(sql, params);
+      return res.json({ ok: true });
+    }
+  } catch (e) {
+    console.error('[players patch] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+/**
+ * DELETE /api/players/:id
+ * Soft delete => active=false
+ */
+app.delete('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const id = String(req.params.id);
+    await db.query(`UPDATE players SET active=false, updated_at=$1 WHERE id=$2`, [Date.now(), id]);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[players delete] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+/**
+ * (Opcional) categorías por API
+ * GET /api/meta/player-categories
+ */
+app.get('/api/meta/player-categories', (_req, res) => {
+  return res.json({ categories: PLAYER_CATEGORIES });
 });
 
 // =========================================================

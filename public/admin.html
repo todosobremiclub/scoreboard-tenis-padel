@@ -2,12 +2,24 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Administrador del Partido</title>
+  <title>Administrador — Scoreboard Tenis/Pádel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <link rel="stylesheet" href="/style.css">
 
-  <!-- Estilos mínimos extra para tabs/badges -->
+  <!-- Estilos mínimos extra -->
   <style>
+    /* === Tabs superiores (Jugadores / Torneos / Partidos) === */
+    .top-tabs {
+      display: flex; gap: 10px; margin: 10px 0 14px; flex-wrap: wrap;
+    }
+    .top-tab {
+      padding: 10px 14px; border-radius: 8px; cursor: pointer;
+      background: #0f4b38; border: 2px solid #093628; color: #f1f1f1;
+      font-weight: 900; letter-spacing: .2px; user-select: none;
+    }
+    .top-tab.active { background: #1a5c45; }
+
+    /* === Tabs internos existentes de Partidos (se mantienen) === */
     .tabs {
       display: flex; gap: 8px; margin: 8px 0 12px;
       flex-wrap: wrap;
@@ -18,11 +30,11 @@
       font-weight: 700;
     }
     .tab.active { background: #1a5c45; }
+
     .filterbar {
       display: grid;
       grid-template-columns: 1fr 220px 220px auto;
-      gap: 10px;
-      margin-bottom: 12px;
+      gap: 10px; margin-bottom: 12px;
     }
     .filterbar input, .filterbar select {
       padding: 8px; background: #0f4b38; color: #f1f1f1; border: 1px solid #093628;
@@ -34,27 +46,27 @@
     }
     .muted { color: #cfd8d3; font-size: 13px; }
     .wrap { display: flex; flex-wrap: wrap; gap: 8px; }
-    .match-title {
-      font-size: 20px; font-weight: 800; margin: 2px 0;
-    }
+    .match-title { font-size: 20px; font-weight: 800; margin: 2px 0; }
     .teams-line { font-size: 16px; }
     .actions .btn {
       background: #1a5c45; color: #fff; border: 1px solid #093628;
-      padding: 8px 10px; border-radius: 4px; cursor: pointer;
-      font-weight: 700;
+      padding: 8px 10px; border-radius: 4px; cursor: pointer; font-weight: 700;
     }
     .actions .btn:disabled { opacity: .5; cursor: not-allowed; }
     .right { margin-left: auto; }
     @media (max-width: 900px){
       .filterbar { grid-template-columns: 1fr 1fr; }
     }
+
+    /* Helpers de visibilidad para top tabs */
+    .section { display: none; }
+    .section.active { display: block; }
   </style>
 </head>
-
 <body>
   <!-- =========================
        LOGIN OVERLAY (Admin)
-       ========================= -->
+  ========================= -->
   <div id="loginOverlay" style="
     position:fixed; inset:0; background:rgba(0,0,0,.65);
     display:none; align-items:center; justify-content:center; z-index:9999;
@@ -68,32 +80,27 @@
         <h2 style="margin:0; font-size:18px;">Ingreso Admin</h2>
         <span id="loginEnvBadge" style="font-size:12px; color:#8892a6;"></span>
       </div>
-
       <p style="margin:8px 0 12px; color:#8892a6;">
         Iniciá sesión para acceder a <b>admin.html</b>.
       </p>
-
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
         <div style="display:grid; gap:6px;">
           <label style="font-size:13px; color:#b6c0d1;">Email</label>
           <input id="adminLoginEmail" type="email" placeholder="usuario@dominio.com" autocomplete="username"
-            style="background:#0e1520;color:#e6edf3;border:1px solid #263241;padding:9px 10px;border-radius:10px;outline:none;">
+                 style="background:#0e1520;color:#e6edf3;border:1px solid #263241;padding:9px 10px;border-radius:10px;outline:none;">
         </div>
-
         <div style="display:grid; gap:6px;">
           <label style="font-size:13px; color:#b6c0d1;">Contraseña</label>
           <input id="adminLoginPassword" type="password" placeholder="********" autocomplete="current-password"
-            style="background:#0e1520;color:#e6edf3;border:1px solid #263241;padding:9px 10px;border-radius:10px;outline:none;">
+                 style="background:#0e1520;color:#e6edf3;border:1px solid #263241;padding:9px 10px;border-radius:10px;outline:none;">
         </div>
-
         <div style="grid-column:1 / span 2; display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:4px;">
           <button id="adminBtnLogin"
-            style="border:1px solid #1f6f2e;background:#238636;color:#e6edf3;padding:9px 12px;border-radius:10px;cursor:pointer;">
+                  style="border:1px solid #1f6f2e;background:#238636;color:#e6edf3;padding:9px 12px;border-radius:10px;cursor:pointer;">
             Iniciar sesión
           </button>
         </div>
       </div>
-
       <div id="adminLoginMsg" style="margin-top:10px; color:#8892a6; font-size:13px;"></div>
     </div>
   </div>
@@ -107,121 +114,217 @@
   ">
     <span id="adminMeLabel" style="font-size:13px; color:#b6c0d1;"></span>
     <button id="adminBtnLogout"
-      style="border:1px solid #263241;background:#101826;color:#e6edf3;padding:7px 10px;border-radius:10px;cursor:pointer;">
+            style="border:1px solid #263241;background:#101826;color:#e6edf3;padding:7px 10px;border-radius:10px;cursor:pointer;">
       Cerrar sesión
     </button>
   </div>
 
   <!-- =========================
-       APP ADMIN (se oculta hasta autenticar)
-       ========================= -->
+       APP ADMIN (tabs superiores)
+  ========================= -->
   <div id="adminApp" style="display:none;">
     <div class="container">
-      <h1>Administrador del Partido</h1>
+      <h1>Consola de Administración</h1>
 
-      <!-- Crear partido -->
-      <section class="form">
-        <h2>Crear partido</h2>
-        <div class="grid-2">
-          <div>
-            <label>Nombre del partido</label>
-            <input id="matchName" type="text" value="Partido de prueba">
-          </div>
-          <div>
-            <label>Instancia del partido</label>
-            <select id="matchStage">
-              <option value="Amistoso" selected>Amistoso</option>
-              <option value="Fase de grupos">Fase de grupos</option>
-              <option value="32vos de final">32vos de final</option>
-              <option value="16vos de final">16vos de final</option>
-              <option value="8vos de final">8vos de final</option>
-              <option value="4tos de final">4tos de final</option>
-              <option value="Semi-Final">Semi-Final</option>
-              <option value="Final">Final</option>
+      <!-- Top Tabs: Jugadores / Torneos / Partidos -->
+      <div class="top-tabs" id="topTabs">
+        <div class="top-tab" data-top="players">Jugadores</div>
+        <div class="top-tab" data-top="tournaments">Torneos</div>
+        <div class="top-tab active" data-top="matches">Partidos</div>
+      </div>
+
+      <!-- === Sección: Jugadores === -->
+      <section id="playersSection" class="section">
+        <div class="form">
+          <h2>Jugadores</h2>
+
+          <!-- Filtros / búsqueda -->
+          <div class="filterbar" style="grid-template-columns: 1fr 220px auto;">
+            <input id="pl_q" type="search" placeholder="Buscar por nombre, apellido, DNI o teléfono...">
+            <select id="pl_filter_cat">
+              <option value="">Todas las categorías</option>
+              <optgroup label="C">
+                <option value="C1">C1</option><option value="C2">C2</option><option value="C3">C3</option>
+                <option value="C4">C4</option><option value="C5">C5</option><option value="C6">C6</option>
+                <option value="C7">C7</option><option value="C8">C8</option><option value="C9">C9</option>
+              </optgroup>
+              <optgroup label="D">
+                <option value="D1">D1</option><option value="D2">D2</option><option value="D3">D3</option>
+                <option value="D4">D4</option><option value="D5">D5</option><option value="D6">D6</option>
+                <option value="D7">D7</option><option value="D8">D8</option><option value="D9">D9</option>
+              </optgroup>
             </select>
-          </div>
-          <div>
-            <label>Jugador/Equipo A</label>
-            <input id="teamA" type="text" value="Equipo A">
-          </div>
-          <div>
-            <label>Jugador/Equipo B</label>
-            <input id="teamB" type="text" value="Equipo B">
-          </div>
-          <div>
-            <label>Saca primero</label>
-            <select id="firstServer">
-              <option value="A" selected>Equipo A</option>
-              <option value="B">Equipo B</option>
-            </select>
-          </div>
-          <div>
-            <label>Mejor de (sets)</label>
-            <select id="bestOf">
-              <option value="1">1</option>
-              <option value="3" selected>3</option>
-            </select>
-          </div>
-          <div>
-            <label>Tie-break</label>
-            <select id="tieBreakAt">
-              <option value="6-6" selected>En 6-6</option>
-              <option value="5-5">En 5-5 (short set)</option>
-              <option value="none">Sin tie-break</option>
-            </select>
-          </div>
-          <div>
-            <label>Punto de oro (sin ventajas)</label>
-            <select id="noAdvantage">
-              <option value="false" selected>No</option>
-              <option value="true">Sí</option>
-            </select>
+            <button id="pl_refreshBtn">Refrescar</button>
           </div>
 
-          <!-- NUEVO: Cancha -->
-          <div>
-            <label>Cancha</label>
-            <input id="courtName" type="text" placeholder="Cancha 1">
+          <!-- Formulario de alta/edición rápida -->
+          <div class="grid-2">
+            <div>
+              <label>Nombre</label>
+              <input id="pl_first" type="text" placeholder="Juan">
+            </div>
+            <div>
+              <label>Apellido</label>
+              <input id="pl_last" type="text" placeholder="Pérez">
+            </div>
+            <div>
+              <label>DNI</label>
+              <input id="pl_dni" type="text" placeholder="12345678">
+            </div>
+            <div>
+              <label>Teléfono</label>
+              <input id="pl_tel" type="text" placeholder="+54 11 ....">
+            </div>
+            <div>
+              <label>Fecha de nacimiento</label>
+              <input id="pl_birth" type="date">
+            </div>
+            <div>
+              <label>Edad</label>
+              <input id="pl_age" type="number" readonly placeholder="—">
+            </div>
+            <div>
+              <label>Categoría</label>
+              <select id="pl_cat">
+                <optgroup label="C">
+                  <option value="C1">C1</option><option value="C2">C2</option><option value="C3">C3</option>
+                  <option value="C4">C4</option><option value="C5">C5</option><option value="C6">C6</option>
+                  <option value="C7">C7</option><option value="C8">C8</option><option value="C9">C9</option>
+                </optgroup>
+                <optgroup label="D">
+                  <option value="D1">D1</option><option value="D2">D2</option><option value="D3">D3</option>
+                  <option value="D4">D4</option><option value="D5">D5</option><option value="D6">D6</option>
+                  <option value="D7">D7</option><option value="D8">D8</option><option value="D9">D9</option>
+                </optgroup>
+              </select>
+            </div>
           </div>
+          <div class="wrap" style="margin-top:12px;">
+            <button id="pl_save">Guardar jugador</button>
+          </div>
+
+          <h3 style="margin-top:20px;">Listado</h3>
+          <div id="playersList" class="list"></div>
         </div>
+      </section>
 
-        <div style="margin-top:12px;" class="wrap">
-          <button id="createBtn">Crear partido</button>
-          <div id="tvUrlWrap" style="display:none;">
-            <div><strong>URL para la TV:</strong> <span id="tvUrl"></span></div>
-            <small class="muted">Abrí esta URL en la pantalla (Smart TV/Chromecast/PC).</small>
+      <!-- === Sección: Torneos (placeholder — Fase 2) === -->
+      <section id="tournamentsSection" class="section">
+        <div class="form">
+          <h2>Torneos</h2>
+          <p class="muted" style="margin: 6px 0 12px;">
+            Próximo paso: alta de torneo (nombre, formato, cantidad de parejas, armar parejas desde jugadores),
+            y luego atar la creación de partidos al torneo. Lo trabajamos en la Fase 2.
+          </p>
+          <div class="wrap">
+            <button disabled class="btn">Nuevo Torneo (próximamente)</button>
           </div>
         </div>
       </section>
 
-      <!-- Panel de administración de múltiples partidos -->
-      <section class="controls">
-        <h2>Partidos</h2>
+      <!-- === Sección: Partidos (TU UI ACTUAL) === -->
+      <section id="matchesSection" class="section active">
+        <!-- Crear partido -->
+        <section class="form">
+          <h2>Crear partido</h2>
+          <div class="grid-2">
+            <div>
+              <label>Nombre del partido</label>
+              <input id="matchName" type="text" value="Partido de prueba">
+            </div>
+            <div>
+              <label>Instancia del partido</label>
+              <select id="matchStage">
+                <option value="Amistoso" selected>Amistoso</option>
+                <option value="Fase de grupos">Fase de grupos</option>
+                <option value="32vos de final">32vos de final</option>
+                <option value="16vos de final">16vos de final</option>
+                <option value="8vos de final">8vos de final</option>
+                <option value="4tos de final">4tos de final</option>
+                <option value="Semi-Final">Semi-Final</option>
+                <option value="Final">Final</option>
+              </select>
+            </div>
+            <div>
+              <label>Jugador/Equipo A</label>
+              <input id="teamA" type="text" value="Equipo A">
+            </div>
+            <div>
+              <label>Jugador/Equipo B</label>
+              <input id="teamB" type="text" value="Equipo B">
+            </div>
+            <div>
+              <label>Saca primero</label>
+              <select id="firstServer">
+                <option value="A" selected>Equipo A</option>
+                <option value="B">Equipo B</option>
+              </select>
+            </div>
+            <div>
+              <label>Mejor de (sets)</label>
+              <select id="bestOf">
+                <option value="1">1</option>
+                <option value="3" selected>3</option>
+              </select>
+            </div>
+            <div>
+              <label>Tie-break</label>
+              <select id="tieBreakAt">
+                <option value="6-6" selected>En 6-6</option>
+                <option value="5-5">En 5-5 (short set)</option>
+                <option value="none">Sin tie-break</option>
+              </select>
+            </div>
+            <div>
+              <label>Punto de oro (sin ventajas)</label>
+              <select id="noAdvantage">
+                <option value="false" selected>No</option>
+                <option value="true">Sí</option>
+              </select>
+            </div>
+            <!-- NUEVO: Cancha -->
+            <div>
+              <label>Cancha</label>
+              <input id="courtName" type="text" placeholder="Cancha 1">
+            </div>
+          </div>
+          <div style="margin-top:12px;" class="wrap">
+            <button id="createBtn">Crear partido</button>
+            <div id="tvUrlWrap" style="display:none;">
+              <div><strong>URL para la TV:</strong> <span id="tvUrl"></span></div>
+              <small class="muted">Abrí esta URL en la pantalla (Smart TV/Chromecast/PC).</small>
+            </div>
+          </div>
+        </section>
 
-        <!-- Pestañas -->
-        <div class="tabs" id="tabs">
-          <div class="tab active" data-tab="active">Activos</div>
-          <div class="tab" data-tab="history">Histórico</div>
-        </div>
+        <!-- Panel de administración de múltiples partidos -->
+        <section class="controls">
+          <h2>Partidos</h2>
+          <!-- Pestañas internas -->
+          <div class="tabs" id="tabs">
+            <div class="tab active" data-tab="active">Activos</div>
+            <div class="tab" data-tab="history">Histórico</div>
+          </div>
 
-        <!-- Filtros / búsqueda / ordenar -->
-        <div class="filterbar">
-          <input id="searchQ" type="search" placeholder="Buscar por partido o equipos..." />
-          <select id="filterStage">
-            <option value="">Todas las instancias</option>
-          </select>
-          <select id="sortBy">
-            <option value="-createdAt" selected>Más recientes</option>
-            <option value="name">Nombre (A-Z)</option>
-            <option value="-updatedAt">Última actualización</option>
-            <option value="-endedAt">Finalizados (más nuevos)</option>
-          </select>
-          <button id="refreshBtn">Refrescar</button>
-        </div>
+          <!-- Filtros / búsqueda / ordenar -->
+          <div class="filterbar">
+            <input id="searchQ" type="search" placeholder="Buscar por partido o equipos..." />
+            <select id="filterStage">
+              <option value="">Todas las instancias</option>
+            </select>
+            <select id="sortBy">
+              <option value="-createdAt" selected>Más recientes</option>
+              <option value="name">Nombre (A-Z)</option>
+              <option value="-updatedAt">Última actualización</option>
+              <option value="-endedAt">Finalizados (más nuevos)</option>
+            </select>
+            <button id="refreshBtn">Refrescar</button>
+          </div>
 
-        <!-- Listas -->
-        <div id="activeList" class="list"></div>
-        <div id="historyList" class="list" style="display:none;"></div>
+          <!-- Listas -->
+          <div id="activeList" class="list"></div>
+          <div id="historyList" class="list" style="display:none;"></div>
+        </section>
       </section>
     </div>
 
@@ -244,7 +347,6 @@
               Points: <span class="points">0-0</span>
             </div>
           </div>
-
           <div class="right" style="text-align:right; min-width: 220px;">
             <div class="muted">Cronómetro: <span class="elapsed">00:00:00</span></div>
             <div class="muted">Estado: <span class="state">scheduled</span></div>
@@ -252,7 +354,6 @@
             <div class="muted">Actualizado: <span class="updatedAt">—</span></div>
           </div>
         </div>
-
         <div class="actions wrap" style="margin-top:10px;">
           <button class="btn btn-open">Abrir TV</button>
           <button class="btn btn-start">Iniciar</button>
@@ -270,7 +371,7 @@
       </div>
     </template>
 
-    <!-- Modal simple para editar (nombre/equipos/instancia) -->
+    <!-- Modal simple para editar partido -->
     <div id="editModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 1000;">
       <div class="card" style="width: min(560px, 92vw);">
         <h3>Editar partido</h3>
@@ -320,9 +421,31 @@
     </div>
   </div>
 
-  <!-- Scripts (se mantiene lo tuyo) -->
+  <!-- Scripts -->
   <script src="/socket.io/socket.io.js"></script>
   <script src="/admin-auth.js"></script>
   <script src="/admin.js"></script>
+  <script>
+    // Mínimo script para alternar las top-tabs (hasta que reemplacemos admin.js)
+    (function(){
+      const tabs = document.querySelectorAll('.top-tab');
+      const sections = {
+        players: document.getElementById('playersSection'),
+        tournaments: document.getElementById('tournamentsSection'),
+        matches: document.getElementById('matchesSection'),
+      };
+      function activate(name){
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.top === name));
+        Object.entries(sections).forEach(([k,el]) => el.classList.toggle('active', k === name));
+      }
+      document.getElementById('topTabs').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('.top-tab');
+        if (!btn) return;
+        activate(btn.dataset.top);
+      });
+      // por defecto queda "matches"
+      activate('matches');
+    })();
+  </script>
 </body>
 </html>

@@ -731,37 +731,50 @@ app.get('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, re
 
 app.post('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
+
   try {
     const { email = '', name = '', role = 'admin', password = '' } = req.body ?? {};
     const emailTrim = String(email).trim().toLowerCase();
     const nameTrim = String(name).trim();
-    if (!emailTrim || !password) return res.status(400).json({ error: 'Email y password son requeridos' });
-    if (!['admin', 'superadmin', 'staff'].includes(role)) return res.status(400).json({ error: 'Rol inválido' });
+
+    if (!emailTrim || !password || !nameTrim) {
+      return res.status(400).json({ error: 'Email, nombre y password son requeridos' });
+    }
+    if (!['admin', 'superadmin', 'staff'].includes(role)) {
+      return res.status(400).json({ error: 'Rol inválido' });
+    }
 
     const saltRounds = parseInt(process.env.BCRYPT_ROUNDS ?? '10', 10);
     const hash = await bcrypt.hash(password, saltRounds);
 
+    // ✅ Tu tabla exige id TEXT NOT NULL sin default:
+    const newId = `u_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+
+    // ✅ Tu tabla guarda bigint epoch ms:
     const now = Date.now();
+
     const { rows } = await db.query(
-      `INSERT INTO users (email, name, role, active, password_hash, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $6)
-       RETURNING id, email, name, role, active`,
-      [emailTrim, nameTrim, role, true, hash, now]
+      `INSERT INTO users (id, email, password_hash, name, role, active, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
+       RETURNING id, email, name, role, active, last_login_at, created_at, updated_at`,
+      [newId, emailTrim, hash, nameTrim, role, true, now]
     );
-    res.status(201).json({ user: rows[0] });
+
+    return res.status(201).json({ user: rows[0] });
   } catch (e) {
+    // Unique violation (si tenés unique en email)
     if (e.code === '23505') {
       return res.status(409).json({ error: 'El email ya existe' });
     }
-    console.error('[superadmin create user]', e);
-    res.status(500).json({ error: 'Error del servidor' });
+    console.error('[superadmin create user] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
   }
 });
 
 app.patch('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = String(req.params.id);
     const { email, name, role, active, password } = req.body ?? {};
     const fields = [];
     const params = [];
@@ -808,7 +821,7 @@ app.patch('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (r
 app.delete('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = String(req.params.id);
     await db.query(`UPDATE users SET active=false, updated_at=$1 WHERE id=$2`, [Date.now(), id]);
     await db.query(`DELETE FROM user_sessions WHERE user_id=$1`, [id]);
     res.json({ ok: true });

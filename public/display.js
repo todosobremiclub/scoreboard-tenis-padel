@@ -1,11 +1,12 @@
-// public/display.js — Rolex-like layout + publicidad en "logo" + carrusel estable
+// public/display.js — layout 3 columnas + banner grande + responsive (ads estable)
 (() => {
   const qs = new URLSearchParams(window.location.search);
-  const matchId = qs.get('match') || qs.get('id') || qs.get('m');
+  const matchId = qs.get('match') || qs.get('id') || qs.get('m'); // soporta varias keys
   const originBase = window.location.origin;
 
   const adDurationSec = Math.max(1, parseInt(qs.get('adSec') || '6', 10));
   const adObjectFit = (qs.get('adFit') || 'contain').toLowerCase(); // contain|cover
+  const pauseAdsWithMatch = (qs.get('pauseAds') || '0') === '1'; // default: NO pausa
 
   const el = {
     clock: document.getElementById('clock'),
@@ -13,9 +14,6 @@
     matchTitle: document.getElementById('matchTitle'),
     matchStage: document.getElementById('matchStage'),
     matchCourt: document.getElementById('matchCourt'),
-
-    brandAdWrap: document.getElementById('brandAdWrap'),
-    brandAdImg: document.getElementById('brandAdImg'),
 
     nameA_first: document.getElementById('nameA_first'),
     nameA_last: document.getElementById('nameA_last'),
@@ -41,7 +39,7 @@
 
   let state = null;
 
-  // ==== clocks
+  // ---- Clock
   const two = (n) => String(n).padStart(2, '0');
   const formatHMS = (ms) => {
     const sec = Math.max(0, Math.floor(ms / 1000));
@@ -66,7 +64,7 @@
   setInterval(tick, 1000);
   tick();
 
-  // ==== name helpers
+  // ---- Helpers
   function splitName(raw) {
     const name = (raw || '').trim();
     if (!name) return { first: '', last: '' };
@@ -77,14 +75,13 @@
     const first = parts.join(' ');
     return { first, last };
   }
-
   function mapPoints(p) {
-    const map = ['0', '15', '30', '40'];
+    const map = ['0','15','30','40'];
     return map[Math.min(p, 3)] || '0';
   }
-
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
+  // ---- Render
   function renderHeader(st) {
     el.matchTitle.textContent = st.name || 'Partido';
     el.matchStage.textContent = (st.stage || 'Amistoso').toUpperCase();
@@ -94,6 +91,7 @@
   function renderNames(st) {
     const a = splitName(st.teams?.[0]?.name || 'Equipo A');
     const b = splitName(st.teams?.[1]?.name || 'Equipo B');
+
     el.nameA_first.textContent = a.first;
     el.nameA_last.textContent = a.last;
     el.nameB_first.textContent = b.first;
@@ -103,25 +101,22 @@
     el.serveB.classList.toggle('on', st.serverIndex === 1);
   }
 
-  // ==== previous sets = games por set
-  function prevCell(val, empty = false) {
+  // previous sets = games por set
+  function prevCell(val, empty=false) {
     const d = document.createElement('div');
     d.className = `prevcell${empty ? ' empty' : ''}`;
     d.textContent = empty ? ' ' : String(val ?? 0);
     return d;
   }
-
   function renderPreviousSets(st) {
     const sets = st.sets || [];
     const finished = st.status === 'finished';
-
-    // Rolex: "previous sets" = todos menos el set en juego (si no terminó)
     const prev = finished ? sets : sets.slice(0, Math.max(0, sets.length - 1));
 
     clear(el.prevRowA);
     clear(el.prevRowB);
 
-    const SLOTS = 5; // visual fijo
+    const SLOTS = 5;
     for (let i = 0; i < SLOTS; i++) {
       const s = prev[i];
       if (!s) {
@@ -134,16 +129,15 @@
     }
   }
 
-  // ==== metrics right side
   function renderMetrics(st) {
     el.setsA.textContent = String(st.setsWonA ?? 0);
     el.setsB.textContent = String(st.setsWonB ?? 0);
 
-    const set = st.sets?.[st.sets.length - 1] ?? { gamesA: 0, gamesB: 0, tieBreak: { active: false } };
+    const set = st.sets?.[st.sets.length - 1] ?? { gamesA: 0, gamesB: 0, tieBreak: { active:false } };
     el.gamesA.textContent = String(set.gamesA ?? 0);
     el.gamesB.textContent = String(set.gamesB ?? 0);
 
-    const tb = set.tieBreak ?? { active: false };
+    const tb = set.tieBreak ?? { active:false };
     if (tb.active) {
       el.pointsA.textContent = String(tb.pointsA ?? 0);
       el.pointsB.textContent = String(tb.pointsB ?? 0);
@@ -162,37 +156,30 @@
     el.pointsB.textContent = mapPoints(g.pointsB ?? 0);
   }
 
-  // ==== ADS (banner + "logo ad" arriba) estable
+  // ---- Ads (estable + placeholder)
   let ads = [];
   let adIdx = 0;
   let adTimer = null;
   let slides = [];
+  let adsPaused = false;
 
-  function clearAdTimer() {
-    if (adTimer) clearInterval(adTimer);
-    adTimer = null;
+  function clearAdTimer() { if (adTimer) clearInterval(adTimer); adTimer = null; }
+
+  function setActive(i) {
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    Array.from(el.adsDots.children).forEach((d, idx) => d.classList.toggle('active', idx === i));
   }
-
-  function setTopAd(url) {
-    if (!el.brandAdWrap || !el.brandAdImg) return;
-    if (!url) {
-      el.brandAdWrap.style.display = 'none';
-      return;
-    }
-    el.brandAdWrap.style.display = 'flex';
-    el.brandAdImg.src = url;
-    el.brandAdImg.style.objectFit = (adObjectFit === 'cover') ? 'cover' : 'contain';
-  }
-
- function setActive(i) {
-  slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
-  Array.from(el.adsDots.children).forEach((d, idx) => d.classList.toggle('active', idx === i));
-}
 
   function nextAd() {
-    if (!slides.length) return;
+    if (slides.length <= 1) return;
     adIdx = (adIdx + 1) % slides.length;
     setActive(adIdx);
+  }
+
+  function restartAdsTimer() {
+    clearAdTimer();
+    if (adsPaused) return;
+    if (slides.length > 1) adTimer = setInterval(nextAd, adDurationSec * 1000);
   }
 
   function normalizeAds(urls) {
@@ -203,6 +190,7 @@
   }
 
   function buildAds(urls) {
+    // limpiar
     el.adsContainer.querySelectorAll('.ads-slide').forEach(n => n.remove());
     el.adsDots.innerHTML = '';
     slides = [];
@@ -214,8 +202,8 @@
       el.adsContainer.insertBefore(empty, el.adsDots);
       slides = [empty];
       adIdx = 0;
-      clearAdTimer();
-      setTopAd(null);
+      adsPaused = false;
+      restartAdsTimer();
       return;
     }
 
@@ -245,14 +233,9 @@
     restartAdsTimer();
   }
 
-  function restartAdsTimer() {
-    clearAdTimer();
-    if (slides.length > 1) adTimer = setInterval(nextAd, adDurationSec * 1000);
-  }
-
   function updateAds(urls) {
     const incoming = normalizeAds(urls);
-    if (incoming.join('|') === ads.join('|')) return; // no cambios => no resetea el carrusel
+    if (incoming.join('|') === ads.join('|')) return; // NO reset
     ads = incoming;
     buildAds(ads);
   }
@@ -266,6 +249,19 @@
     } catch {}
   }
 
+  function applyAdsPauseFromState(st) {
+    if (!pauseAdsWithMatch) {
+      adsPaused = false;
+      restartAdsTimer();
+      return;
+    }
+    const shouldPause = !st.running;
+    if (shouldPause !== adsPaused) {
+      adsPaused = shouldPause;
+      restartAdsTimer();
+    }
+  }
+
   function render(st) {
     state = st;
     renderHeader(st);
@@ -273,8 +269,8 @@
     renderPreviousSets(st);
     renderMetrics(st);
 
-    // actualiza ads sin reiniciar si no cambian
     updateAds(st.ads || []);
+    applyAdsPauseFromState(st);
     tick();
   }
 

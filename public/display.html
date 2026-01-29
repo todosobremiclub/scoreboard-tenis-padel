@@ -5,26 +5,23 @@
   <title>Pantalla del Partido</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-  <!-- Plus Jakarta Sans (moderna, premium, deportiva) -->
+  <!-- Fuente (si ya la agregaste, dejala) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap"
-    rel="stylesheet"
-  >
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 
-  <!-- Tus estilos limpios -->
   <link rel="stylesheet" href="/style.css" />
-</head><body>
+</head>
+<body>
   <div class="tv-wrapper rolex-board">
-    <!-- TOP BAR -->
+    <!-- TOPBAR -->
     <div class="rolex-topbar">
       <div class="rolex-timebox">
         <div class="rolex-clock" id="clock">--:--</div>
         <div class="rolex-elapsed" id="elapsed">00:00:00</div>
       </div>
 
-      
+      <div class="rolex-center">
         <div class="rolex-title" id="matchTitle">Partido</div>
         <div class="rolex-stage" id="matchStage">AMISTOSO</div>
       </div>
@@ -34,18 +31,18 @@
       </div>
     </div>
 
-    <!-- BOARD (3 columnas tipo Rolex) -->
+    <!-- MAIN (3 columnas) -->
     <div class="rolex-main">
-      <!-- Columna izquierda: PREVIOUS SETS (games por set) -->
-      <div class="rolex-prev">
+      <!-- PREVIOUS SETS (games por set) -->
+      <section class="rolex-prev">
         <div class="rolex-prev-head">PREVIOUS SETS</div>
         <div class="rolex-prev-row" id="prevRowA"></div>
         <div class="rolex-prev-row" id="prevRowB"></div>
-      </div>
+      </section>
 
-      <!-- Columna centro: NOMBRES -->
-      <div class="rolex-names">
-        <div class="rolex-name-row" id="nameRowA">
+      <!-- NOMBRES -->
+      <section class="rolex-names">
+        <div class="rolex-name-row">
           <span class="serve-dot" id="serveA" aria-label="Saca A"></span>
           <div class="rolex-name">
             <div class="first" id="nameA_first">Equipo</div>
@@ -53,17 +50,17 @@
           </div>
         </div>
 
-        <div class="rolex-name-row" id="nameRowB">
+        <div class="rolex-name-row">
           <span class="serve-dot" id="serveB" aria-label="Saca B"></span>
           <div class="rolex-name">
             <div class="first" id="nameB_first">Equipo</div>
             <div class="last" id="nameB_last">B</div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Columna derecha: SETS / GAMES / POINTS -->
-      <div class="rolex-metrics">
+      <!-- METRICS -->
+      <section class="rolex-metrics">
         <div class="rolex-metrics-head">
           <div>SETS</div>
           <div>GAMES</div>
@@ -81,11 +78,11 @@
           <div class="m big green" id="gamesB">0</div>
           <div class="m big red" id="pointsB">0</div>
         </div>
-      </div>
+      </section>
     </div>
 
-    <!-- Banner carrusel inferior -->
-    <div class="ads-container" id="adsContainer" aria-label="Publicidad (rotación)">
+    <!-- BANNER GRANDE ABAJO -->
+    <div class="ads-container ads-large" id="adsContainer" aria-label="Publicidad (rotación)">
       <div class="ads-dots" id="adsDots"></div>
     </div>
   </div>

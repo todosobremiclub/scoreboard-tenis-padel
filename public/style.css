@@ -561,3 +561,43 @@ button:disabled{
     padding-left: 0;
   }
 }
+
+/* Banner grande solo en display */
+.ads-container.ads-large{
+  height: 240px;           /* desktop */
+}
+
+/* Responsive: apilar columnas y ajustar tamaños */
+@media (max-width: 900px){
+  .rolex-topbar{
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .rolex-right{ justify-content: center; }
+
+  .rolex-main{
+    grid-template-columns: 1fr;   /* apila */
+  }
+
+  /* En mobile el banner ocupa menos alto */
+  .ads-container.ads-large{
+    height: 170px;
+  }
+
+  /* Tipografías un toque más chicas */
+  .rolex-title{ font-size: 24px; }
+  .rolex-clock{ font-size: 32px; }
+  .rolex-name .last{ font-size: 24px; }
+  .m.big{ height: 56px; font-size: 28px; }
+}
+
+/* Ultra mobile */
+@media (max-width: 520px){
+  .tv-wrapper{ padding: 10px; }
+  .rolex-board{ padding: 10px; }
+  .rolex-topbar{ padding: 12px; }
+  .rolex-main{ padding: 12px; }
+
+  .ads-container.ads-large{ height: 150px; }
+  .prevcell{ width: 32px; height: 40px; font-size: 18px; }
+}

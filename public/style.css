@@ -1,25 +1,45 @@
+/* =========================================================
+   public/style.css (LIMPIO)
+   - Base (fondo + tipografía)
+   - Admin UI (admin.html / superadmin.html)
+   - Ads carousel (display)
+   - Display: Rolex-like scoreboard (display.html)
+   ========================================================= */
 
-/* public/style.css */
+/* -------------------------
+   Variables
+-------------------------- */
 :root{
-  --green:#0b3d2e;
-  --green-dark:#06281d;
-  --yellow:#e1d36e;
-  --white:#f1f1f1;
-  --accent:#1a5c45;
+  --green: #0b3d2e;
+  --green-dark: #06281d;
+  --yellow: #e1d36e;
+  --white: #f1f1f1;
+  --accent: #1a5c45;
+
+  /* neutrales / overlays */
+  --glass: rgba(0,0,0,.52);
+  --panel: rgba(16,16,16,.55);
+  --panel2: rgba(16,16,16,.50);
+  --border: rgba(255,255,255,.14);
+  --gold-border: rgba(216,199,123,.22);
+  --gold: #d8c77b;
 }
 
+/* -------------------------
+   Reset
+-------------------------- */
 *{ box-sizing: border-box; }
+html, body{ height: 100%; }
 
-/* ==========================
-   FONDO CON IMAGEN (PADEL)
-   ========================== */
+/* -------------------------
+   Base (fondo + overlay)
+-------------------------- */
 body{
   margin: 0;
   min-height: 100vh;
-  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, "Inter", Arial, sans-serif;
   color: var(--white);
 
-  /* Imagen de fondo */
   background-image: url("/assets/Fondo.webp");
   background-size: cover;
   background-position: center;
@@ -28,116 +48,27 @@ body{
   position: relative;
 }
 
-/* Overlay oscuro para contraste */
 body::before{
   content: "";
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.38); /* ajustable 0.30 - 0.55 */
+  background: rgba(0,0,0,.38);
   pointer-events: none;
   z-index: -1;
 }
 
-
-/* Contenedor general TV */
-.tv-wrapper{
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 16px;
-}
-
-/* Barra superior: hora actual y tiempo transcurrido */
-.topbar{
-  display:flex;
-  justify-content: space-between;
-  align-items:center;
-  background: var(--green);
-  border: 2px solid #0a2a20;
-  padding: 12px 16px;
-  margin-bottom: 12px;
-}
-
-.topbar .clock,
-.topbar .elapsed{
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--yellow);
-}
-
-/* Tarjetas de jugadores */
-.card{
-  background: var(--green);
-  border: 2px solid #0a2a20;
-  padding: 12px;
-  margin-bottom: 12px;
-}
-
-.row{
-  display:flex;
-  align-items:center;
-  gap: 12px;
-}
-
-.name{
-  flex:1;
-  font-size: 26px;
-  font-weight: 700;
-}
-
-
-/* Pelotita de saque */
-.server-ball{
-  margin-left: 8px;
-  font-size: 22px;
-  line-height: 1;
-}
-
-
-.server-dot{
-  width: 10px;
-  height:10px;
-  background: var(--yellow);
-  border-radius: 50%;
-  margin-left:8px;
-  visibility: hidden;
-}
-.server-dot.active{
-  visibility: visible;
-}
-
-/* Cabeceras */
-.header-row{
-  display:grid;
-  grid-template-columns: 1fr 170px 170px 170px;
-  gap: 8px;
-  font-weight: 700;
-  margin-bottom: 6px;
-  color: var(--yellow);
-}
-.data-row{
-  display:grid;
-  grid-template-columns: 1fr 170px 170px 170px;
-  gap: 8px;
-  align-items:center;
-}
-
-/* Celdas */
-.cell{
-  background: #0f4b38;
-  border: 2px solid #093628;
-  text-align:center;
-  padding: 8px;
-  font-size: 28px;
-  min-height: 48px;
-}
-
-/* Admin layout */
+/* -------------------------
+   Shared containers
+-------------------------- */
 .container{
   max-width: 1100px;
   margin: 0 auto;
   padding: 16px;
 }
 
+/* =========================================================
+   ADMIN UI (admin.html)
+   ========================================================= */
 .form, .controls{
   background: var(--green);
   border: 2px solid #0a2a20;
@@ -146,14 +77,22 @@ body::before{
 }
 
 .form label{
-  display:block; margin: 8px 0 4px;
+  display: block;
+  margin: 8px 0 4px;
 }
+
 .form input[type="text"], .form select{
   width: 100%;
   padding: 8px;
   background: #0f4b38;
   color: var(--white);
   border: 1px solid #093628;
+}
+
+.grid-2{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 button{
@@ -163,55 +102,28 @@ button{
   padding: 10px 14px;
   font-weight: 700;
   cursor: pointer;
-  border-radius:4px;
-}
-button:disabled{ opacity: .5; cursor: not-allowed; }
-
-.grid-2{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  border-radius: 4px;
 }
 
-
-/* ====== Barra de información (Instancia, Partido, Cancha) ====== */
-.infobar{
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 10px;
-  align-items:center;
-  background: var(--green);
-  border: 2px solid #0a2a20;
-  padding: 10px 16px;
-  margin-bottom: 12px;
-}
-.infobar .title{
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--white);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.infobar .pill{
-  background: #0f4b38;
-  border: 2px solid #093628;
-  color: var(--yellow);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-weight: 800;
-  font-size: 14px;
-  white-space: nowrap;
+button:disabled{
+  opacity: .5;
+  cursor: not-allowed;
 }
 
-/* ====== Carrusel de Publicidad ====== */
+/* =========================================================
+   ADS CAROUSEL (reusable)
+   (Usado en display.html)
+   ========================================================= */
 .ads-container{
   position: relative;
-  background: var(--green);
-  border: 2px solid #0a2a20;
-  height: 160px;           /* podés subir a 200–240px si querés */
-  margin-top: 12px;
   overflow: hidden;
+  height: 120px;            /* ticker default */
+  margin-top: 14px;
+  border-radius: 14px;
+  background: var(--panel2);
+  border: 1px solid var(--gold-border);
+  backdrop-filter: blur(8px) saturate(115%);
+  -webkit-backdrop-filter: blur(8px) saturate(115%);
 }
 
 .ads-slide{
@@ -220,450 +132,42 @@ button:disabled{ opacity: .5; cursor: not-allowed; }
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 8px;
-  background: #0f4b38;
+  padding: 8px 14px;
+  background: rgba(0,0,0,.18);
   animation: fadeIn .6s ease;
 }
+
 .ads-slide.active{ display: flex; }
 
 .ads-slide img{
   max-width: 100%;
   max-height: 100%;
-  object-fit: contain;    /* configurable desde JS (contain | cover) */
+  object-fit: contain;      /* el JS puede cambiar a cover */
+  border-radius: 10px;
 }
 
-/* Puntitos indicadores */
 .ads-dots{
   position: absolute;
-  left: 0; right: 0; bottom: 6px;
+  left: 0;
+  right: 0;
+  bottom: 10px;
   display: flex;
   justify-content: center;
   gap: 6px;
 }
+
 .ads-dot{
-  width: 8px; height: 8px; border-radius: 50%;
-  background: rgba(225, 211, 110, .35);
-}
-.ads-dot.active{ background: var(--yellow); }
-
-/* Fade in */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-
-/* ======== ESTILOS DEL TABLERO ESTILO TORNEO (RG) ======== */
-
-/* Contenedor principal del tablero */
-.rg-board{
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 16px;
-}
-
-/* ---------- Topbar ---------- */
-.rg-topbar{
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr; /* izq: hora, centro: meta, der: cancha */
-  align-items: center;
-  gap: 12px;
-  background: var(--green);
-  border: 2px solid #0a2a20;
-  padding: 10px 14px;
-  margin-bottom: 12px;
-}
-
-.rg-timebox{
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-}
-.rg-clock{
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--yellow);
-}
-.rg-elapsed{
-  font-size: 18px;
-  font-weight: 700;
-  color: #d9e0db;
-}
-
-.rg-center-meta{
-  text-align: center;
-  line-height: 1.15;
-}
-.rg-stage{
-  font-size: 14px;
-  font-weight: 800;
-  color: #e1d36e;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-.rg-title{
-  font-size: 22px;
-  font-weight: 800;
-  color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rg-court{
-  justify-self: end;
-  background: #0f4b38;
-  border: 2px solid #093628;
-  color: #e1d36e;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-weight: 800;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-/* ---------- Scorecard (dos filas) ---------- */
-.rg-scorecard{
-  background: var(--green);
-  border: 2px solid #0a2a20;
-  padding: 8px;
-}
-
-/* Fila jugador/equipo */
-.rg-row{
-  display: grid;
-  grid-template-columns: 1.2fr 1fr auto; /* jugador | sets | puntos del game */
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
-  border-bottom: 1px solid #093628;
-}
-.rg-row:last-child{ border-bottom: 0; }
-
-/* Columna: jugador + pelotita */
-.rg-player{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Pelotita amarilla (no emoji) para indicar el sacador */
-.serve-dot{
-  width: 12px; height: 12px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: #ffd94f;           /* amarillo */
-  box-shadow: 0 0 0 2px #0a2a20; /* contorno oscuro */
-  opacity: 0;                    /* oculta por defecto */
-  transform: translateY(1px);
-}
-.serve-dot.on{ opacity: 1; }
-
-/* Nombre tipo torneo: nombre normal + APELLIDO fuerte */
-.rg-name .first{
-  display: block;
-  font-size: 18px;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 0.2px;
-}
-.rg-name .last{
-  display: block;
-  font-size: 22px;
-  font-weight: 900;
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Columna de sets: números en celdas compactas */
-.rg-sets{
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 42px;   /* ancho de cada columna de set */
-  gap: 8px;
-  justify-content: end;
-  align-items: center;
-  min-height: 44px;
-}
-.setcell{
-  background: #0f4b38;
-  border: 2px solid #093628;
-  color: #ffffff;
-  font-size: 22px;
-  font-weight: 800;
-  text-align: center;
-  padding: 6px 0;
-  border-radius: 4px;
-  min-width: 42px;
-}
-
-/* Puntos del game actual a la derecha (caja roja) */
-.rg-points{
-  min-width: 54px;
-  text-align: center;
-  font-size: 22px;
-  font-weight: 900;
-  color: #ffffff;
-  background: #a32020;       /* rojo fuerte */
-  border: 2px solid #6f1414; /* borde oscuro */
-  border-radius: 6px;
-  padding: 8px 10px;
-}
-
-/* Ajustes del carrusel (ya existente) para integrarlo visualmente */
-.ads-container{
-  margin-top: 14px;
-  height: 160px;
-}
-
-/* Responsive suave */
-@media (max-width: 860px){
-  .rg-topbar{ grid-template-columns: 1fr; text-align: center; }
-  .rg-court{ justify-self: center; }
-  .rg-row{ grid-template-columns: 1fr; gap: 8px; }
-  .rg-sets{ justify-content: start; }
-  .rg-points{ justify-self: end; }
-}
-
-
-
-/* =========================================================
-   MODERN UI — TABLERO
-   Bordes redondeados, sombras suaves, líneas divisorias,
-   tipografía clara y jerarquías bien marcadas.
-   ========================================================= */
-
-/* Fuente: prioriza Segoe/UI/Inter según SO */
-body{
-  font-family: "Segoe UI", system-ui, -apple-system, "Inter", Arial, sans-serif;
-}
-
-/* Paleta y elevaciones */
-:root{
-  --board-bg: #0c3a2c;      /* base tablero */
-  --board-deep: #07281d;    /* más oscuro para contrastes */
-  --card-bg: #0f4b38;       /* bloques internos */
-  --divider: #0a3427;
-  --shadow: 0 8px 24px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.25);
-  --radius-lg: 14px;
-  --radius-md: 10px;
-  --radius-sm: 8px;
-}
-
-/* Contenedor general del tablero */
-.rg-board{
-  max-width: 1280px;
-  margin: 12px auto 18px;
-  padding: 12px;
-  background: linear-gradient(180deg, var(--board-deep) 0%, var(--board-bg) 60%);
-  border: 1px solid #0a2a20;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-}
-
-/* ---------- TOPBAR MODERNA ---------- */
-.rg-topbar{
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  align-items: center;
-  gap: 14px;
-  background: rgba(20, 74, 57, .55);
-  border: 1px solid #0a2a20;
-  border-radius: var(--radius-md);
-  padding: 12px 16px;
-  margin-bottom: 12px;
-  backdrop-filter: blur(2px);
-}
-
-/* Tiempo (izquierda) */
-.rg-timebox{
-  display: flex; gap: 14px; align-items: baseline;
-}
-.rg-clock{
-  font-size: 26px; font-weight: 900; color: var(--yellow);
-  text-shadow: 0 1px 0 #243c33;
-}
-.rg-elapsed{
-  font-size: 16px; font-weight: 700; color: #d6e4dd; opacity: .95;
-}
-
-/* Centro: Título arriba (grande), Instancia abajo (pill) */
-.rg-center-meta{
-  text-align: center; line-height: 1.1;
-}
-.rg-title{
-  font-size: clamp(20px, 3vw, 28px);
-  font-weight: 900; letter-spacing: .3px; color: #fff;
-  text-shadow: 0 1px 0 #213c32;
-}
-.rg-stage{
-  display: inline-block;
-  margin-top: 6px;
-  font-size: 12px; font-weight: 900; letter-spacing: .8px;
-  color: #1b2; /* pseudo-verde claro para resaltar */
-  text-transform: uppercase;
-  background: #0c3b2d;
-  border: 1px solid #0a2a20;
-  border-radius: 999px;
-  padding: 4px 10px;
-}
-
-/* Derecha: Cancha (pill) */
-.rg-court{
-  justify-self: end;
-  color: #f1f1f1;
-  background: #0e3f30;
-  border: 1px solid #0a2a20;
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-size: 14px; font-weight: 800;
-  box-shadow: inset 0 0 0 1px #0b2f23;
-}
-
-/* ---------- SCORECARD modern ---------- */
-.rg-scorecard{
-  background: rgba(10, 56, 43, .55);
-  border: 1px solid #0a2a20;
-  border-radius: var(--radius-md);
-  box-shadow: inset 0 0 0 1px #0b2f23;
-  padding: 8px;
-}
-
-/* Fila de jugador con separadores */
-.rg-row{
-  display: grid;
-  grid-template-columns: 1.2fr 1fr auto;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 12px;
-  position: relative;
-}
-.rg-row + .rg-row{
-  border-top: 1px dashed var(--divider);
-}
-
-/* Columna jugador + pelotita */
-.rg-player{
-  display: flex; align-items: center; gap: 12px;
-}
-.serve-dot{
-  width: 12px; height: 12px; border-radius: 50%;
-  background: #ffd84b; box-shadow: 0 0 0 2px #0a2a20, 0 0 10px rgba(255,216,75,.45);
-  opacity: 0; transform: translateY(1px);
-}
-.serve-dot.on{ opacity: 1; }
-
-/* Nombre estilo “tablero” */
-.rg-name .first{
-  display: block; font-size: 18px; font-weight: 800; color: #eaf4ef;
-  letter-spacing: .2px;
-}
-.rg-name .last{
-  display: block; font-size: 22px; font-weight: 900; color: #ffffff;
-  text-transform: uppercase; letter-spacing: .6px;
-}
-
-/* Sets (cápsulas redondeadas) */
-.rg-sets{
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 46px;
-  gap: 10px; justify-content: end; align-items: center;
-  min-height: 46px;
-}
-.setcell{
-  background: var(--card-bg);
-  border: 1px solid #0a2a20;
-  border-radius: 8px;
-  color: #fff; font-size: 22px; font-weight: 900;
-  text-align: center; padding: 8px 0;
-  box-shadow: inset 0 0 0 1px #0b2f23;
-}
-
-/* Puntos del game (badge roja) */
-.rg-points{
-  min-width: 58px; text-align: center;
-  font-size: 22px; font-weight: 900; color: #fff;
-  background: #b52222;
-  border: 1px solid #7a1717;
-  border-radius: 10px;
-  padding: 8px 12px;
-  box-shadow: inset 0 0 0 1px #6f1414, 0 2px 6px rgba(0,0,0,.25);
-}
-
-/* Carrusel integrado visualmente */
-.ads-container{
-  margin-top: 16px;
-  height: 170px;
-  background: rgba(10, 56, 43, .55);
-  border: 1px solid #0a2a20;
-  border-radius: var(--radius-md);
-  box-shadow: inset 0 0 0 1px #0b2f23;
-}
-.ads-slide{
-  border-radius: var(--radius-md);
-}
-.ads-dots{ bottom: 10px; }
-.ads-dot{
-  width: 9px; height: 9px; border-radius: 50%;
-  background: rgba(225, 211, 110, .35);
+  background: rgba(255,255,255,.22);
+  border: 1px solid rgba(216,199,123,.22);
   box-shadow: 0 0 0 1px rgba(0,0,0,.35);
 }
+
 .ads-dot.active{
-  background: var(--yellow);
-  box-shadow: 0 0 0 1px rgba(0,0,0,.55), 0 0 8px rgba(225, 211, 110, .65);
-}
-
-/* Responsive */
-@media (max-width: 960px){
-  .rg-topbar{ grid-template-columns: 1fr; text-align: center; }
-  .rg-court{ justify-self: center; }
-  .rg-row{ grid-template-columns: 1fr; gap: 10px; }
-  .rg-sets{ justify-content: start; }
-  .rg-points{ justify-self: end; }
-}
-
-
-/* ==========================
-   GLASS EFFECT PARA TABLERO
-   ========================== */
-.rg-board{
-  /* semi-transparente */
-  background: rgba(6, 40, 29, 0.55) !important;
-
-  /* efecto vidrio */
-  backdrop-filter: blur(10px) saturate(120%);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
-
-  border: 1px solid rgba(255,255,255,0.14) !important;
-  box-shadow: 0 18px 45px rgba(0,0,0,.40);
-}
-
-/* Topbar y scorecard también transparentes */
-.rg-topbar,
-.rg-scorecard,
-.ads-container{
-  background: rgba(10, 56, 43, 0.55) !important;
-  border: 1px solid rgba(255,255,255,0.10) !important;
-  backdrop-filter: blur(8px) saturate(115%);
-  -webkit-backdrop-filter: blur(8px) saturate(115%);
-}
-
-/* Mejora de contraste de textos */
-.rg-title,
-.rg-name .first,
-.rg-name .last{
-  text-shadow: 0 2px 12px rgba(0,0,0,.55);
-}
-
-.rg-clock{
-  text-shadow: 0 2px 12px rgba(0,0,0,.55);
-}
-
-
-.ads-container{
-  display: block !important; /* por si quedó algo raro */
-  min-height: 170px;
+  background: var(--gold);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.55), 0 0 8px rgba(216,199,123,.65);
 }
 
 .ads-empty{
@@ -676,307 +180,68 @@ body{
   text-shadow: 0 2px 10px rgba(0,0,0,.55);
 }
 
-/* =========================================
-   DISPLAY "ROLEX-LIKE" THEME (solo TV)
-   Activar con: <div class="rg-board rolex">...
-   ========================================= */
-
-.rg-board.rolex{
-  --rolex-bg: rgba(0,0,0,.52);
-  --rolex-panel: rgba(18,18,18,.55);
-  --rolex-border: rgba(216,199,123,.22);
-  --rolex-gold: #d8c77b;
-  --rolex-text: #f3f6f5;
-
-  background: var(--rolex-bg) !important;
-  border: 1px solid rgba(255,255,255,.14) !important;
-}
-
-.rg-board.rolex .rg-topbar,
-.rg-board.rolex .rg-scorecard,
-.rg-board.rolex .ads-container{
-  background: var(--rolex-panel) !important;
-  border: 1px solid var(--rolex-border) !important;
-}
-
-.rg-board.rolex .rg-clock{
-  color: var(--rolex-gold) !important;
-  letter-spacing: .5px;
-}
-
-.rg-board.rolex .rg-title,
-.rg-board.rolex .rg-name .first,
-.rg-board.rolex .rg-name .last{
-  color: var(--rolex-text) !important;
-}
-
-.rg-board.rolex .rg-stage{
-  color: #6dff9a !important;
-  background: rgba(9,64,38,.55) !important;
-  border: 1px solid rgba(27,111,82,.45) !important;
-}
-
-.rg-board.rolex .rg-court{
-  color: var(--rolex-text) !important;
-  border-color: rgba(255,255,255,.12) !important;
-}
-
-.rg-board.rolex .setcell{
-  border-color: rgba(216,199,123,.22) !important;
-  color: var(--rolex-gold) !important;
-  background: rgba(0,0,0,.18) !important;
-}
-
-.rg-board.rolex .rg-points{
-  background: rgba(180,34,34,.85) !important;
-  border-color: rgba(122,23,23,.85) !important;
-}
-
-.rg-board.rolex .ads-slide{
-  background: rgba(0,0,0,.22) !important;
-}
-
-.rg-board.rolex .ads-dot{
-  background: rgba(255,255,255,.22) !important;
-  border: 1px solid rgba(216,199,123,.22);
-}
-
-.rg-board.rolex .ads-dot.active{
-  background: var(--rolex-gold) !important;
-  box-shadow: 0 0 10px rgba(216,199,123,.55);
+@keyframes fadeIn{
+  from{ opacity: 0; }
+  to{ opacity: 1; }
 }
 
 /* =========================================================
-   ROLEX-LIKE LAYOUT (solo display.html)
-   Activado por .rolex-board
+   DISPLAY: ROLEX-LIKE SCOREBOARD (display.html)
    ========================================================= */
 
-.rolex-board{
+/* Wrapper */
+.tv-wrapper{
   max-width: 1360px;
   margin: 10px auto;
   padding: 14px;
+}
+
+.rolex-board{
   border-radius: 16px;
-  background: rgba(0,0,0,.52);
+  background: var(--glass);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 45px rgba(0,0,0,.40);
   backdrop-filter: blur(10px) saturate(120%);
   -webkit-backdrop-filter: blur(10px) saturate(120%);
-  border: 1px solid rgba(255,255,255,.14);
-  box-shadow: 0 18px 45px rgba(0,0,0,.40);
+  padding: 14px;
 }
 
 /* TOPBAR */
 .rolex-topbar{
-  display:grid;
+  display: grid;
   grid-template-columns: 280px 1fr 280px;
-  align-items:center;
+  align-items: center;
   gap: 12px;
   padding: 14px 16px;
   border-radius: 14px;
-  background: rgba(16,16,16,.55);
-  border: 1px solid rgba(216,199,123,.22);
+  background: var(--panel);
+  border: 1px solid var(--gold-border);
 }
 
-.rolex-timebox{display:flex; gap:14px; align-items:baseline;}
+.rolex-timebox{
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+}
+
 .rolex-clock{
   font-size: 40px;
   font-weight: 900;
-  color: #d8c77b;
+  color: var(--gold);
   letter-spacing: .6px;
   text-shadow: 0 2px 12px rgba(0,0,0,.55);
 }
-.rolex-elapsed{font-size:16px; font-weight:800; color:#cfd8d3;}
 
-.rolex-center{text-align:center;}
-.rolex-title{
-  font-size: 34px;
-  font-weight: 900;
-  color: #f1f1f1;
-  text-shadow: 0 2px 12px rgba(0,0,0,.55);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rolex-stage{
-  display:inline-block;
-  margin-top:6px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-weight: 900;
-  font-size: 12px;
-  letter-spacing: .8px;
-  background: rgba(9,64,38,.55);
-  border: 1px solid rgba(27,111,82,.45);
-  color: #6dff9a;
-  text-transform: uppercase;
-}
-
-.rolex-right{display:flex; justify-content:flex-end;}
-.rolex-court{
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.20);
-  color:#f1f1f1;
-  font-weight: 900;
-}
-
-/* MAIN GRID: prev | names | metrics */
-.rolex-main{
-  margin-top: 14px;
-  display:grid;
-  grid-template-columns: 240px 1fr 320px;
-  gap: 14px;
-  padding: 14px;
-  border-radius: 14px;
-  background: rgba(16,16,16,.50);
-  border: 1px solid rgba(216,199,123,.22);
-}
-
-/* PREVIOUS SETS */
-.rolex-prev-head{
-  font-weight: 900;
-  font-size: 12px;
-  letter-spacing: .8px;
-  color: rgba(216,199,123,.95);
-  margin-bottom: 10px;
-}
-.rolex-prev-row{
-  display:flex;
-  gap: 10px;
-  align-items:center;
-  min-height: 64px;
-  padding: 8px 0;
-}
-.prevcell{
-  width: 36px;
-  height: 44px;
-  border-radius: 10px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-weight: 900;
-  font-size: 22px;
-  color: #d8c77b;
-  background: rgba(0,0,0,.18);
-  border: 1px solid rgba(216,199,123,.22);
-}
-.prevcell.empty{
-  opacity: .25;
-}
-
-/* NAMES */
-.rolex-name-row{
-  display:flex;
-  align-items:center;
-  gap: 12px;
-  min-height: 64px;
-  padding: 10px 0;
-}
-.rolex-name .first{
+.rolex-elapsed{
   font-size: 16px;
   font-weight: 800;
-  color: #eaf4ef;
-}
-.rolex-name .last{
-  font-size: 28px;
-  font-weight: 1000;
-  color:#ffffff;
-  text-transform: uppercase;
-  letter-spacing: .6px;
+  color: #cfd8d3;
 }
 
-/* serve dot (reusa tu clase) */
-.rolex-board .serve-dot{
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #ffd84b;
-  box-shadow: 0 0 0 2px rgba(0,0,0,.65), 0 0 10px rgba(255,216,75,.45);
-  opacity: 0;
-}
-.rolex-board .serve-dot.on{opacity: 1;}
-
-/* METRICS */
-.rolex-metrics-head{
-  display:grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
-  font-weight: 900;
-  font-size: 12px;
-  letter-spacing: .9px;
-  color: rgba(216,199,123,.95);
-  text-align:center;
-  margin-bottom: 10px;
-}
-.rolex-metrics-row{
-  display:grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
-  margin: 10px 0;
+.rolex-center{
+  text-align: center;
 }
 
-.m.big{
-  height: 64px;
-  border-radius: 12px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size: 34px;
-  font-weight: 1000;
-  border: 2px solid rgba(255,255,255,.12);
-  box-shadow: inset 0 0 0 2px rgba(0,0,0,.15);
-}
-.m.gold{ color:#d8c77b; background: rgba(0,0,0,.18); border-color: rgba(216,199,123,.22); }
-.m.green{ color:#f1f1f1; background: rgba(12,54,52,.55); border-color: rgba(27,111,82,.65); }
-.m.red{ color:#f1f1f1; background: rgba(180,34,34,.85); border-color: rgba(122,23,23,.85); }
-
-/* ADS: ticker más bajo */
-.rolex-board .ads-container{
-  margin-top: 14px;
-  height: 120px;
-  border-radius: 14px;
-  background: rgba(16,16,16,.50) !important;
-  border: 1px solid rgba(216,199,123,.22) !important;
-}
-
-/* =========================================================
-   ROLEX-LIKE LAYOUT (solo display.html) + BRAND AD SLOT
-   ========================================================= */
-
-.rolex-board{
-  max-width: 1360px;
-  margin: 10px auto;
-  padding: 14px;
-  border-radius: 16px;
-  background: rgba(0,0,0,.52);
-  backdrop-filter: blur(10px) saturate(120%);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
-  border: 1px solid rgba(255,255,255,.14);
-  box-shadow: 0 18px 45px rgba(0,0,0,.40);
-}
-
-/* TOPBAR */
-.rolex-topbar{
-  display:grid;
-  grid-template-columns: 280px 1fr 280px;
-  align-items:center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: rgba(16,16,16,.55);
-  border: 1px solid rgba(216,199,123,.22);
-}
-
-.rolex-timebox{display:flex; gap:14px; align-items:baseline;}
-.rolex-clock{
-  font-size: 40px;
-  font-weight: 900;
-  color: #d8c77b;
-  letter-spacing: .6px;
-  text-shadow: 0 2px 12px rgba(0,0,0,.55);
-}
-.rolex-elapsed{font-size:16px; font-weight:800; color:#cfd8d3;}
-
-.rolex-center{text-align:center;}
 .rolex-title{
   font-size: 34px;
   font-weight: 900;
@@ -986,9 +251,10 @@ body{
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .rolex-stage{
-  display:inline-block;
-  margin-top:6px;
+  display: inline-block;
+  margin-top: 6px;
   padding: 4px 12px;
   border-radius: 999px;
   font-weight: 900;
@@ -1000,28 +266,19 @@ body{
   text-transform: uppercase;
 }
 
-.rolex-right{display:flex; justify-content:flex-end;}
-.rolex-court{
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.20);
-  color:#f1f1f1;
-  font-weight: 900;
-}
-
-/* BRAND AD (lugar "ROLEX") */
+/* “Logo ad” / publicidad en topbar */
 .rolex-brandAd{
   height: 44px;
   margin: 2px auto 8px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 12px;
   background: rgba(0,0,0,.18);
   border: 1px solid rgba(216,199,123,.18);
-  overflow:hidden;
+  overflow: hidden;
 }
+
 .rolex-brandAd img{
   width: 100%;
   height: 100%;
@@ -1029,19 +286,34 @@ body{
   padding: 6px 10px;
 }
 
-/* MAIN GRID: prev | names | metrics */
+/* Court pill */
+.rolex-right{
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rolex-court{
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.20);
+  color: #f1f1f1;
+  font-weight: 900;
+}
+
+/* MAIN GRID */
 .rolex-main{
   margin-top: 14px;
-  display:grid;
+  display: grid;
   grid-template-columns: 240px 1fr 320px;
   gap: 14px;
   padding: 14px;
   border-radius: 14px;
-  background: rgba(16,16,16,.50);
-  border: 1px solid rgba(216,199,123,.22);
+  background: var(--panel2);
+  border: 1px solid var(--gold-border);
 }
 
-/* PREVIOUS SETS (games por set) */
+/* Previous sets */
 .rolex-prev-head{
   font-weight: 900;
   font-size: 12px;
@@ -1049,99 +321,172 @@ body{
   color: rgba(216,199,123,.95);
   margin-bottom: 10px;
 }
+
 .rolex-prev-row{
-  display:flex;
+  display: flex;
   gap: 10px;
-  align-items:center;
+  align-items: center;
   min-height: 64px;
   padding: 8px 0;
 }
+
 .prevcell{
   width: 36px;
   height: 44px;
   border-radius: 10px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 900;
   font-size: 22px;
-  color: #d8c77b;
+  color: var(--gold);
   background: rgba(0,0,0,.18);
-  border: 1px solid rgba(216,199,123,.22);
+  border: 1px solid var(--gold-border);
 }
+
 .prevcell.empty{ opacity: .25; }
 
-/* NAMES */
-.rolex-name-row{
-  display:flex;
-  align-items:center;
-  gap: 12px;
-  min-height: 64px;
-  padding: 10px 0;
-}
-.rolex-name .first{
-  font-size: 16px;
-  font-weight: 800;
-  color: #eaf4ef;
-}
-.rolex-name .last{
-  font-size: 28px;
-  font-weight: 1000;
-  color:#ffffff;
-  text-transform: uppercase;
-  letter-spacing: .6px;
+/* Names (alineado + guías sutiles) */
+.rolex-names{
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  align-items: stretch;
+  padding-left: 12px;
+  border-left: 1px solid rgba(216,199,123,.14);
+  position: relative;
 }
 
-/* Serve dot (reusa tu clase) */
-.rolex-board .serve-dot{
+/* divisoria entre filas */
+.rolex-names::after{
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(216,199,123,.00),
+    rgba(216,199,123,.16),
+    rgba(216,199,123,.00)
+  );
+  transform: translateY(-0.5px);
+  pointer-events: none;
+}
+
+/* cada fila de nombre (caja sutil) */
+.rolex-name-row{
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  column-gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(0,0,0,.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+
+/* dot saque */
+.serve-dot{
   width: 12px;
   height: 12px;
   border-radius: 50%;
   background: #ffd84b;
   box-shadow: 0 0 0 2px rgba(0,0,0,.65), 0 0 10px rgba(255,216,75,.45);
   opacity: 0;
+  justify-self: center;
 }
-.rolex-board .serve-dot.on{ opacity: 1; }
+.serve-dot.on{ opacity: 1; }
 
-/* METRICS */
+.rolex-name{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.05;
+  min-height: 48px;
+}
+
+.rolex-name .first{
+  font-size: 14px;
+  font-weight: 800;
+  color: rgba(234,244,239,.92);
+  letter-spacing: .2px;
+  margin-bottom: 2px;
+}
+
+.rolex-name .last{
+  font-size: 30px;
+  font-weight: 1000;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: .7px;
+  text-shadow: 0 2px 10px rgba(0,0,0,.45);
+  transform: translateY(1px);
+}
+
+/* Metrics (SETS / GAMES / POINTS) */
 .rolex-metrics-head{
-  display:grid;
+  display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
   font-weight: 900;
   font-size: 12px;
   letter-spacing: .9px;
   color: rgba(216,199,123,.95);
-  text-align:center;
+  text-align: center;
   margin-bottom: 10px;
 }
+
 .rolex-metrics-row{
-  display:grid;
+  display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
   margin: 10px 0;
 }
+
 .m.big{
   height: 64px;
   border-radius: 12px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 34px;
   font-weight: 1000;
   border: 2px solid rgba(255,255,255,.12);
   box-shadow: inset 0 0 0 2px rgba(0,0,0,.15);
 }
-.m.gold{ color:#d8c77b; background: rgba(0,0,0,.18); border-color: rgba(216,199,123,.22); }
-.m.green{ color:#f1f1f1; background: rgba(12,54,52,.55); border-color: rgba(27,111,82,.65); }
-.m.red{ color:#f1f1f1; background: rgba(180,34,34,.85); border-color: rgba(122,23,23,.85); }
 
-/* Banner inferior más "ticker" */
-.rolex-board .ads-container{
-  margin-top: 14px;
-  height: 120px;
-  border-radius: 14px;
-  background: rgba(16,16,16,.50) !important;
-  border: 1px solid rgba(216,199,123,.22) !important;
+.m.gold{
+  color: var(--gold);
+  background: rgba(0,0,0,.18);
+  border-color: var(--gold-border);
 }
 
+.m.green{
+  color: #f1f1f1;
+  background: rgba(12,54,52,.55);
+  border-color: rgba(27,111,82,.65);
+}
+
+.m.red{
+  color: #f1f1f1;
+  background: rgba(180,34,34,.85);
+  border-color: rgba(122,23,23,.85);
+}
+
+/* Responsive */
+@media (max-width: 960px){
+  .rolex-topbar{
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 10px;
+  }
+  .rolex-right{ justify-content: center; }
+  .rolex-main{
+    grid-template-columns: 1fr;
+  }
+  .rolex-names{
+    border-left: none;
+    padding-left: 0;
+  }
+}

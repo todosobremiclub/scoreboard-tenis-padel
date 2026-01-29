@@ -353,6 +353,32 @@ function updateMatchCard(matchId){
   const stateEl = card.querySelector('.state');
   const updatedEl = card.querySelector('.updatedAt');
 
+const btnDelete = card.querySelector('.btn-delete');
+if (btnDelete) {
+  btnDelete.addEventListener('click', async () => {
+    const ok = confirm('¿Eliminar este partido? Se borrará definitivamente (activos/históricos) y sus publicidades.');
+    if (!ok) return;
+
+    try {
+      const r = await fetch(`/api/matches/${matchId}?deleteAds=1`, { method: 'DELETE' });
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok) {
+        alert(data.error || 'No se pudo eliminar');
+        return;
+      }
+
+      // opción A: remover del DOM
+      card.remove();
+
+      // opción B: refrescar listas (si tenés función)
+      // await refreshLists();
+    } catch (e) {
+      alert('Error de red al eliminar');
+    }
+  });
+}
+
   // Actualizar textos
   badgeStatus.textContent = match.status || (match.running ? 'running' : 'scheduled');
   title.textContent = match.name || 'Partido';

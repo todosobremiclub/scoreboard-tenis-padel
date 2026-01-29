@@ -16,11 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import pg from 'pg';
 const { Pool } = pg;
 
-if (db) {
-  db.query('SHOW search_path;')
-    .then(r => console.log('[BOOT] search_path =', r.rows[0]?.search_path))
-    .catch(e => console.log('[BOOT] search_path error', e.message));
-}
+
 
 // ----------------------------------------------------------
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +52,12 @@ const db = hasDB
       options: '-c search_path=public'
     })
   : null;
+// DEBUG (temporal): mostrar search_path real del backend
+if (db) {
+  db.query('SHOW search_path;')
+    .then(r => console.log('[BOOT] search_path =', r.rows[0]?.search_path))
+    .catch(e => console.log('[BOOT] search_path error', e.message));
+}
 const requireDB = (res) => {
   if (!hasDB || !db) {
     res.status(503).json({ error: 'DB no configurada' });
@@ -67,6 +69,7 @@ const requireDB = (res) => {
 function dbEnabled() {
   return !!db;
 }
+
 
 // =========================================================
 // Config / Constantes (partidos)

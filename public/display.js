@@ -1,4 +1,4 @@
-// public/display.js — layout 3 columnas + banner grande + responsive (ads estable)
+// public/display.js — layout 3 columnas + banner grande + responsive (ads estable + fix desktop)
 (() => {
   const qs = new URLSearchParams(window.location.search);
   const matchId = qs.get('match') || qs.get('id') || qs.get('m'); // soporta varias keys
@@ -6,7 +6,7 @@
 
   const adDurationSec = Math.max(1, parseInt(qs.get('adSec') || '6', 10));
   const adObjectFit = (qs.get('adFit') || 'contain').toLowerCase(); // contain|cover
-  const pauseAdsWithMatch = (qs.get('pauseAds') || '0') === '1'; // default: NO pausa
+  const pauseAdsWithMatch = (qs.get('pauseAds') || '0') === '1'; // si 1, pausa con el partido
 
   const el = {
     clock: document.getElementById('clock'),
@@ -39,6 +39,18 @@
 
   let state = null;
 
+  // =========================
+  // FIX INFALIBLE: Desktop oculta #adsContainer con display:none
+  // => Forzamos visible desde JS con !important
+  // =========================
+  function forceShowAds() {
+    if (!el.adsContainer) return;
+    el.adsContainer.style.setProperty('display', 'block', 'important');
+    el.adsContainer.style.setProperty('visibility', 'visible', 'important');
+    el.adsContainer.style.setProperty('opacity', '1', 'important');
+  }
+  forceShowAds();
+
   // ---- Clock
   const two = (n) => String(n).padStart(2, '0');
   const formatHMS = (ms) => {
@@ -48,6 +60,7 @@
     const s = sec % 60;
     return `${two(h)}:${two(m)}:${two(s)}`;
   };
+
   function computeElapsed(st) {
     let elapsed = st.accumulatedMs || 0;
     if (st.running) {
@@ -56,10 +69,11 @@
     }
     return elapsed;
   }
+
   function tick() {
     const now = new Date();
-    el.clock.textContent = `${two(now.getHours())}:${two(now.getMinutes())}`;
-    if (state) el.elapsed.textContent = formatHMS(computeElapsed(state));
+    if (el.clock) el.clock.textContent = `${two(now.getHours())}:${two(now.getMinutes())}`;
+    if (state && el.elapsed) el.elapsed.textContent = formatHMS(computeElapsed(state));
   }
   setInterval(tick, 1000);
   tick();
@@ -75,39 +89,47 @@
     const first = parts.join(' ');
     return { first, last };
   }
+
   function mapPoints(p) {
-    const map = ['0','15','30','40'];
+    const map = ['0', '15', '30', '40'];
     return map[Math.min(p, 3)] || '0';
   }
-  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  function clear(node) {
+    if (!node) return;
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
 
   // ---- Render
   function renderHeader(st) {
-    el.matchTitle.textContent = st.name || 'Partido';
-    el.matchStage.textContent = (st.stage || 'Amistoso').toUpperCase();
-    el.matchCourt.textContent = st.courtName && st.courtName.trim() ? `Cancha ${st.courtName}` : 'Cancha —';
+    if (el.matchTitle) el.matchTitle.textContent = st.name || 'Partido';
+    if (el.matchStage) el.matchStage.textContent = (st.stage || 'Amistoso').toUpperCase();
+    if (el.matchCourt) el.matchCourt.textContent = (st.courtName && st.courtName.trim())
+      ? `Cancha ${st.courtName}`
+      : 'Cancha —';
   }
 
   function renderNames(st) {
     const a = splitName(st.teams?.[0]?.name || 'Equipo A');
     const b = splitName(st.teams?.[1]?.name || 'Equipo B');
 
-    el.nameA_first.textContent = a.first;
-    el.nameA_last.textContent = a.last;
-    el.nameB_first.textContent = b.first;
-    el.nameB_last.textContent = b.last;
+    if (el.nameA_first) el.nameA_first.textContent = a.first;
+    if (el.nameA_last) el.nameA_last.textContent = a.last;
+    if (el.nameB_first) el.nameB_first.textContent = b.first;
+    if (el.nameB_last) el.nameB_last.textContent = b.last;
 
-    el.serveA.classList.toggle('on', st.serverIndex === 0);
-    el.serveB.classList.toggle('on', st.serverIndex === 1);
+    if (el.serveA) el.serveA.classList.toggle('on', st.serverIndex === 0);
+    if (el.serveB) el.serveB.classList.toggle('on', st.serverIndex === 1);
   }
 
   // previous sets = games por set
-  function prevCell(val, empty=false) {
+  function prevCell(val, empty = false) {
     const d = document.createElement('div');
     d.className = `prevcell${empty ? ' empty' : ''}`;
     d.textContent = empty ? ' ' : String(val ?? 0);
     return d;
   }
+
   function renderPreviousSets(st) {
     const sets = st.sets || [];
     const finished = st.status === 'finished';
@@ -120,40 +142,43 @@
     for (let i = 0; i < SLOTS; i++) {
       const s = prev[i];
       if (!s) {
-        el.prevRowA.appendChild(prevCell(0, true));
-        el.prevRowB.appendChild(prevCell(0, true));
+        el.prevRowA?.appendChild(prevCell(0, true));
+        el.prevRowB?.appendChild(prevCell(0, true));
       } else {
-        el.prevRowA.appendChild(prevCell(s.gamesA ?? 0));
-        el.prevRowB.appendChild(prevCell(s.gamesB ?? 0));
+        el.prevRowA?.appendChild(prevCell(s.gamesA ?? 0));
+        el.prevRowB?.appendChild(prevCell(s.gamesB ?? 0));
       }
     }
   }
 
   function renderMetrics(st) {
-    el.setsA.textContent = String(st.setsWonA ?? 0);
-    el.setsB.textContent = String(st.setsWonB ?? 0);
+    if (el.setsA) el.setsA.textContent = String(st.setsWonA ?? 0);
+    if (el.setsB) el.setsB.textContent = String(st.setsWonB ?? 0);
 
-    const set = st.sets?.[st.sets.length - 1] ?? { gamesA: 0, gamesB: 0, tieBreak: { active:false } };
-    el.gamesA.textContent = String(set.gamesA ?? 0);
-    el.gamesB.textContent = String(set.gamesB ?? 0);
+    const set = st.sets?.[st.sets.length - 1] ?? { gamesA: 0, gamesB: 0, tieBreak: { active: false } };
+    if (el.gamesA) el.gamesA.textContent = String(set.gamesA ?? 0);
+    if (el.gamesB) el.gamesB.textContent = String(set.gamesB ?? 0);
 
-    const tb = set.tieBreak ?? { active:false };
+    const tb = set.tieBreak ?? { active: false };
     if (tb.active) {
-      el.pointsA.textContent = String(tb.pointsA ?? 0);
-      el.pointsB.textContent = String(tb.pointsB ?? 0);
+      if (el.pointsA) el.pointsA.textContent = String(tb.pointsA ?? 0);
+      if (el.pointsB) el.pointsB.textContent = String(tb.pointsB ?? 0);
       return;
     }
 
     const g = st.currentGame || { pointsA: 0, pointsB: 0, advantage: null };
+
+    // ventaja clásica
     if (!st.rules?.noAdvantage && g.pointsA === 3 && g.pointsB === 3) {
-      if (g.advantage === 'A') { el.pointsA.textContent = 'V'; el.pointsB.textContent = '40'; return; }
-      if (g.advantage === 'B') { el.pointsA.textContent = '40'; el.pointsB.textContent = 'V'; return; }
-      el.pointsA.textContent = '40'; el.pointsB.textContent = '40';
+      if (g.advantage === 'A') { if (el.pointsA) el.pointsA.textContent = 'V'; if (el.pointsB) el.pointsB.textContent = '40'; return; }
+      if (g.advantage === 'B') { if (el.pointsA) el.pointsA.textContent = '40'; if (el.pointsB) el.pointsB.textContent = 'V'; return; }
+      if (el.pointsA) el.pointsA.textContent = '40';
+      if (el.pointsB) el.pointsB.textContent = '40';
       return;
     }
 
-    el.pointsA.textContent = mapPoints(g.pointsA ?? 0);
-    el.pointsB.textContent = mapPoints(g.pointsB ?? 0);
+    if (el.pointsA) el.pointsA.textContent = mapPoints(g.pointsA ?? 0);
+    if (el.pointsB) el.pointsB.textContent = mapPoints(g.pointsB ?? 0);
   }
 
   // ---- Ads (estable + placeholder)
@@ -163,11 +188,14 @@
   let slides = [];
   let adsPaused = false;
 
-  function clearAdTimer() { if (adTimer) clearInterval(adTimer); adTimer = null; }
+  function clearAdTimer() {
+    if (adTimer) clearInterval(adTimer);
+    adTimer = null;
+  }
 
   function setActive(i) {
     slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
-    Array.from(el.adsDots.children).forEach((d, idx) => d.classList.toggle('active', idx === i));
+    Array.from(el.adsDots?.children || []).forEach((d, idx) => d.classList.toggle('active', idx === i));
   }
 
   function nextAd() {
@@ -190,6 +218,11 @@
   }
 
   function buildAds(urls) {
+    if (!el.adsContainer || !el.adsDots) return;
+
+    // FIX desktop: por si algo lo vuelve a ocultar
+    forceShowAds();
+
     // limpiar
     el.adsContainer.querySelectorAll('.ads-slide').forEach(n => n.remove());
     el.adsDots.innerHTML = '';
@@ -224,7 +257,11 @@
 
       const dot = document.createElement('div');
       dot.className = 'ads-dot';
-      dot.addEventListener('click', () => { adIdx = i; setActive(adIdx); restartAdsTimer(); });
+      dot.addEventListener('click', () => {
+        adIdx = i;
+        setActive(adIdx);
+        restartAdsTimer();
+      });
       el.adsDots.appendChild(dot);
     });
 
@@ -250,27 +287,33 @@
   }
 
   function applyAdsPauseFromState(st) {
+    // Default: NO pausa (mejor para TV)
     if (!pauseAdsWithMatch) {
       adsPaused = false;
       restartAdsTimer();
       return;
     }
-    function applyAdsPauseFromState(st){
-  // Para TV: por defecto NO pausamos nunca.
-  // Si querés pausar, lo implementamos con ?pauseAds=1
-  adsPaused = false;
-  restartAdsTimer();
-}
+    // si está habilitado pauseAds=1, pausamos cuando el partido no corre
+    const shouldPause = !st.running;
+    if (shouldPause !== adsPaused) {
+      adsPaused = shouldPause;
+      restartAdsTimer();
+    }
   }
 
   function render(st) {
     state = st;
+
     renderHeader(st);
     renderNames(st);
     renderPreviousSets(st);
     renderMetrics(st);
 
+    // actualiza ads sin resetear
     updateAds(st.ads || []);
+    // fallback extra si el estado vino sin ads
+    if (!st.ads || !st.ads.length) refreshAdsFromApi();
+
     applyAdsPauseFromState(st);
     tick();
   }

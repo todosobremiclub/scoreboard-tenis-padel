@@ -184,11 +184,10 @@
     el.brandAdImg.style.objectFit = (adObjectFit === 'cover') ? 'cover' : 'contain';
   }
 
-  function setActive(i) {
-    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
-    Array.from(el.adsDots.children).forEach((d, idx) => d.classList.toggle('active', idx === i));
-    setTopAd(ads[i]); // sincroniza el "logo ad" con el slide activo
-  }
+ function setActive(i) {
+  slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+  Array.from(el.adsDots.children).forEach((d, idx) => d.classList.toggle('active', idx === i));
+}
 
   function nextAd() {
     if (!slides.length) return;

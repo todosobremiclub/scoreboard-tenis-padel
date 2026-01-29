@@ -16,6 +16,12 @@ import { v4 as uuidv4 } from 'uuid';
 import pg from 'pg';
 const { Pool } = pg;
 
+if (db) {
+  db.query('SHOW search_path;')
+    .then(r => console.log('[BOOT] search_path =', r.rows[0]?.search_path))
+    .catch(e => console.log('[BOOT] search_path error', e.message));
+}
+
 // ----------------------------------------------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

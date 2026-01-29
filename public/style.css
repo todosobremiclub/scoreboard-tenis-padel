@@ -675,6 +675,75 @@ body{
   padding: 18px 10px;
   text-shadow: 0 2px 10px rgba(0,0,0,.55);
 }
-``
+
+/* =========================================
+   DISPLAY "ROLEX-LIKE" THEME (solo TV)
+   Activar con: <div class="rg-board rolex">...
+   ========================================= */
+
+.rg-board.rolex{
+  --rolex-bg: rgba(0,0,0,.52);
+  --rolex-panel: rgba(18,18,18,.55);
+  --rolex-border: rgba(216,199,123,.22);
+  --rolex-gold: #d8c77b;
+  --rolex-text: #f3f6f5;
+
+  background: var(--rolex-bg) !important;
+  border: 1px solid rgba(255,255,255,.14) !important;
+}
+
+.rg-board.rolex .rg-topbar,
+.rg-board.rolex .rg-scorecard,
+.rg-board.rolex .ads-container{
+  background: var(--rolex-panel) !important;
+  border: 1px solid var(--rolex-border) !important;
+}
+
+.rg-board.rolex .rg-clock{
+  color: var(--rolex-gold) !important;
+  letter-spacing: .5px;
+}
+
+.rg-board.rolex .rg-title,
+.rg-board.rolex .rg-name .first,
+.rg-board.rolex .rg-name .last{
+  color: var(--rolex-text) !important;
+}
+
+.rg-board.rolex .rg-stage{
+  color: #6dff9a !important;
+  background: rgba(9,64,38,.55) !important;
+  border: 1px solid rgba(27,111,82,.45) !important;
+}
+
+.rg-board.rolex .rg-court{
+  color: var(--rolex-text) !important;
+  border-color: rgba(255,255,255,.12) !important;
+}
+
+.rg-board.rolex .setcell{
+  border-color: rgba(216,199,123,.22) !important;
+  color: var(--rolex-gold) !important;
+  background: rgba(0,0,0,.18) !important;
+}
+
+.rg-board.rolex .rg-points{
+  background: rgba(180,34,34,.85) !important;
+  border-color: rgba(122,23,23,.85) !important;
+}
+
+.rg-board.rolex .ads-slide{
+  background: rgba(0,0,0,.22) !important;
+}
+
+.rg-board.rolex .ads-dot{
+  background: rgba(255,255,255,.22) !important;
+  border: 1px solid rgba(216,199,123,.22);
+}
+
+.rg-board.rolex .ads-dot.active{
+  background: var(--rolex-gold) !important;
+  box-shadow: 0 0 10px rgba(216,199,123,.55);
+}
 
 

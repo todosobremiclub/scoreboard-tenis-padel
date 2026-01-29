@@ -1,85 +1,92 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <title>Pantalla del Partido</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <!-- CARGA CORRECTA DE CSS -->
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div class="tv-wrapper rg-board rolex">
-    <!-- Barra superior -->
-    <div class="rg-topbar">
-      <!-- Izquierda: Hora y Cronómetro -->
-      <div class="rg-timebox">
-        <div class="rg-clock" id="clock">--:--</div>
-        <div class="rg-elapsed" id="elapsed">00:00:00</div>
+  <div class="tv-wrapper rolex-board">
+    <!-- TOP BAR -->
+    <div class="rolex-topbar">
+      <div class="rolex-timebox">
+        <div class="rolex-clock" id="clock">--:--</div>
+        <div class="rolex-elapsed" id="elapsed">00:00:00</div>
       </div>
 
-      <!-- Centro: Título arriba, Instancia abajo -->
-      <div class="rg-center-meta">
-        <div class="rg-title" id="matchTitle">Partido</div>
-        <div class="rg-stage" id="matchStage">Amistoso</div>
+      <div class="rolex-center">
+        <!-- ACÁ VA LA PUBLICIDAD "TIPO LOGO" -->
+        <div class="rolex-brandAd" id="brandAdWrap">
+          <img id="brandAdImg" alt="Publicidad" />
+        </div>
+
+        <div class="rolex-title" id="matchTitle">Partido</div>
+        <div class="rolex-stage" id="matchStage">AMISTOSO</div>
       </div>
 
-      <!-- Derecha: Cancha -->
-      <div class="rg-court" id="matchCourt">Cancha —</div>
+      <div class="rolex-right">
+        <div class="rolex-court" id="matchCourt">Cancha —</div>
+      </div>
     </div>
 
-    <!-- Marcador principal estilo torneo -->
-    <div class="rg-scorecard">
-      <!-- Fila Jugador/Equipo A -->
-      <div class="rg-row" id="rowA">
-        <div class="rg-player">
+    <!-- BOARD (3 columnas tipo Rolex) -->
+    <div class="rolex-main">
+      <!-- Columna izquierda: PREVIOUS SETS (games por set) -->
+      <div class="rolex-prev">
+        <div class="rolex-prev-head">PREVIOUS SETS</div>
+        <div class="rolex-prev-row" id="prevRowA"></div>
+        <div class="rolex-prev-row" id="prevRowB"></div>
+      </div>
+
+      <!-- Columna centro: NOMBRES -->
+      <div class="rolex-names">
+        <div class="rolex-name-row" id="nameRowA">
           <span class="serve-dot" id="serveA" aria-label="Saca A"></span>
-          <div class="rg-name">
-            <span id="nameA_first" class="first">Equipo</span>
-            <span id="nameA_last" class="last">A</span>
+          <div class="rolex-name">
+            <div class="first" id="nameA_first">Equipo</div>
+            <div class="last" id="nameA_last">A</div>
           </div>
         </div>
 
-        <!-- Sets previos + set en juego -->
-        <div class="rg-sets" id="setsRowA">
-          <!-- celdas de sets inyectadas por JS -->
+        <div class="rolex-name-row" id="nameRowB">
+          <span class="serve-dot" id="serveB" aria-label="Saca B"></span>
+          <div class="rolex-name">
+            <div class="first" id="nameB_first">Equipo</div>
+            <div class="last" id="nameB_last">B</div>
+          </div>
         </div>
-
-        <!-- Puntos del game actual -->
-        <div class="rg-points" id="pointsA">0</div>
       </div>
 
-      <!-- Fila Jugador/Equipo B -->
-      <div class="rg-row" id="rowB">
-        <div class="rg-player">
-          <span class="serve-dot" id="serveB" aria-label="Saca B"></span>
-          <div class="rg-name">
-            <span id="nameB_first" class="first">Equipo</span>
-            <span id="nameB_last" class="last">B</span>
-          </div>
+      <!-- Columna derecha: SETS / GAMES / POINTS -->
+      <div class="rolex-metrics">
+        <div class="rolex-metrics-head">
+          <div>SETS</div>
+          <div>GAMES</div>
+          <div>POINTS</div>
         </div>
 
-        <!-- Sets previos + set en juego -->
-        <div class="rg-sets" id="setsRowB">
-          <!-- celdas de sets inyectadas por JS -->
+        <div class="rolex-metrics-row">
+          <div class="m big gold" id="setsA">0</div>
+          <div class="m big green" id="gamesA">0</div>
+          <div class="m big red" id="pointsA">0</div>
         </div>
 
-        <!-- Puntos del game actual -->
-        <div class="rg-points" id="pointsB">0</div>
+        <div class="rolex-metrics-row">
+          <div class="m big gold" id="setsB">0</div>
+          <div class="m big green" id="gamesB">0</div>
+          <div class="m big red" id="pointsB">0</div>
+        </div>
       </div>
     </div>
 
-    <!-- Carrusel de Publicidades -->
+    <!-- Banner carrusel inferior -->
     <div class="ads-container" id="adsContainer" aria-label="Publicidad (rotación)">
-      <!-- Slides se inyectan por JS -->
       <div class="ads-dots" id="adsDots"></div>
     </div>
   </div>
 
-  <!-- CARGA CORRECTA DE SCRIPTS -->
   <script src="/socket.io/socket.io.js"></script>
   <script src="/display.js"></script>
 </body>
 </html>
-
-

@@ -1124,26 +1124,6 @@ app.delete('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (
   }
 });
 
-// Permite roles: admin, staff, superadmin
-function requireAdminOrStaff(req, res, next) {
-  const role = req.user?.role;
-  if (!role || !['admin','staff','superadmin'].includes(role)) {
-    return res.status(403).json({ error: 'No autorizado' });
-  }
-  next();
-}
-
-// Calcula edad a partir de birthdate (ms epoch)
-function calcAge(birthMs) {
-  if (!birthMs) return null;
-  const d = new Date(Number(birthMs));
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - d.getFullYear();
-  const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
-  return age;
-}
 
 // =========================================================
 // Players (REST)

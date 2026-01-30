@@ -58,6 +58,9 @@ if (db) {
     .then(r => console.log('[BOOT] search_path =', r.rows[0]?.search_path))
     .catch(e => console.log('[BOOT] search_path error', e.message));
 }
+
+console.log('[BOOT] CODE_VERSION players_public_only v1');
+
 const requireDB = (res) => {
   if (!hasDB || !db) {
     res.status(503).json({ error: 'DB no configurada' });

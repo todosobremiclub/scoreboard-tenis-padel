@@ -1149,6 +1149,27 @@ function calcAge(birthMs) {
 // Players (REST)
 // =========================================================
 
+// Permite roles: admin, staff, superadmin
+function requireAdminOrStaff(req, res, next) {
+  const role = req.user?.role;
+  if (!role || !['admin', 'staff', 'superadmin'].includes(role)) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+  next();
+}
+
+// Calcula edad a partir de birthdate (ms epoch)
+function calcAge(birthMs) {
+  if (!birthMs) return null;
+  const d = new Date(Number(birthMs));
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
+
 /**
  * GET /api/players
  * Query params:
@@ -1177,6 +1198,7 @@ app.get('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
 
     const where = [];
     const params = [];
+
     if (onlyActive) {
       params.push(true);
       where.push(`active = $${params.length}`);
@@ -1190,19 +1212,18 @@ app.get('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
       params.push(category);
       where.push(`category = $${params.length}`);
     }
+
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     params.push(limit, offset);
 
-    // 👇 **CAMBIO CLAVE**: esquema calificado
+    // ✅ SIEMPRE public.players
     const sql = `
       SELECT id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at
       FROM public.players
       ${whereSql}
       ORDER BY ${orderBy}
-      LIMIT $${params.length-1} OFFSET $${params.length}
+      LIMIT $${params.length - 1} OFFSET $${params.length}
     `;
-    // (Opcional) log para diagnóstico
-    // console.log('[players list] SQL:', sql); console.log('[players list] params:', params);
 
     const { rows } = await db.query(sql, params);
     return res.json({ players: rows, limit, offset });
@@ -1220,9 +1241,11 @@ app.post('/api/players', authRequired, requireAdminOrStaff, async (req, res) => 
   if (!requireDB(res)) return;
   try {
     const { first_name = '', last_name = '', dni = '', phone = '', birthdate = null, category = '' } = req.body ?? {};
+
     const fn = String(first_name).trim();
     const ln = String(last_name).trim();
     const cat = String(category).toUpperCase().trim();
+
     if (!fn || !ln) return res.status(400).json({ error: 'Nombre y apellido son requeridos' });
     if (cat && !PLAYER_CATEGORIES.includes(cat)) return res.status(400).json({ error: 'Categoría inválida' });
 
@@ -1231,14 +1254,13 @@ app.post('/api/players', authRequired, requireAdminOrStaff, async (req, res) => 
     const bms = birthdate == null ? null : Number(birthdate);
     const age = bms ? calcAge(bms) : null;
 
-    // 👇 **CAMBIO CLAVE**: esquema calificado
+    // ✅ SIEMPRE public.players
     const sql = `
       INSERT INTO public.players (id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9)
       RETURNING id
     `;
-    const params = [id, fn, ln, dni || null, phone || null, bms, age, cat || null, now];
-    // console.log('[players create] params:', params);
+    const params = [id, fn, ln, (dni || null), (phone || null), bms, age, (cat || null), now];
 
     const { rows } = await db.query(sql, params);
     return res.status(201).json({ id: rows[0]?.id });
@@ -1250,7 +1272,7 @@ app.post('/api/players', authRequired, requireAdminOrStaff, async (req, res) => 
 
 /**
  * PATCH /api/players/:id
- * body: { first_name?, last_name?, dni?, phone?, birthdate?(ms) , category?, active? }
+ * body: { first_name?, last_name?, dni?, phone?, birthdate?(ms), category?, active? }
  */
 app.patch('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res) => {
   if (!requireDB(res)) return;
@@ -1261,47 +1283,49 @@ app.patch('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res
     const fields = [];
     const params = [];
 
-    if (typeof first_name === 'string') { fields.push(`first_name = $${fields.length+1}`); params.push(first_name.trim()); }
-    if (typeof last_name  === 'string') { fields.push(`last_name = $${fields.length+1}`);  params.push(last_name.trim());  }
-    if (typeof dni        === 'string') { fields.push(`dni = $${fields.length+1}`);        params.push(dni.trim() || null); }
-    if (typeof phone      === 'string') { fields.push(`phone = $${fields.length+1}`);      params.push(phone.trim() || null); }
+    if (typeof first_name === 'string') { fields.push(`first_name = $${fields.length + 1}`); params.push(first_name.trim()); }
+    if (typeof last_name === 'string')  { fields.push(`last_name  = $${fields.length + 1}`); params.push(last_name.trim()); }
+    if (typeof dni === 'string')        { fields.push(`dni        = $${fields.length + 1}`); params.push(dni.trim() || null); }
+    if (typeof phone === 'string')      { fields.push(`phone      = $${fields.length + 1}`); params.push(phone.trim() || null); }
 
-    // birthdate y age
-    let setAgeFromBirth = false;
+    let shouldRecalcAge = false;
     if (birthdate != null) {
       const bms = Number(birthdate);
-      fields.push(`birthdate = $${fields.length+1}`); params.push(Number.isNaN(bms) ? null : bms);
-      setAgeFromBirth = true;
+      fields.push(`birthdate = $${fields.length + 1}`);
+      params.push(Number.isNaN(bms) ? null : bms);
+      shouldRecalcAge = true;
     }
+
     if (typeof category === 'string') {
       const cat = category.toUpperCase().trim();
       if (cat && !PLAYER_CATEGORIES.includes(cat)) return res.status(400).json({ error: 'Categoría inválida' });
-      fields.push(`category = $${fields.length+1}`); params.push(cat || null);
+      fields.push(`category = $${fields.length + 1}`);
+      params.push(cat || null);
     }
+
     if (typeof active === 'boolean') {
-      fields.push(`active = $${fields.length+1}`); params.push(active);
+      fields.push(`active = $${fields.length + 1}`);
+      params.push(active);
     }
+
     if (!fields.length) return res.json({ ok: true });
 
     // updated_at
-    fields.push(`updated_at = $${fields.length+1}`); params.push(Date.now());
+    fields.push(`updated_at = $${fields.length + 1}`);
+    params.push(Date.now());
     params.push(id);
 
-    // 👇 **CAMBIO CLAVE**: esquema calificado
-    let sql = `UPDATE public.players SET ${fields.join(', ')} WHERE id = $${params.length}`;
-    if (setAgeFromBirth) {
-      sql += ` RETURNING birthdate`;
-      const { rows } = await db.query(sql, params);
-      if (rows && rows[0]) {
-        const newBirth = rows[0].birthdate;
-        const newAge = newBirth ? calcAge(newBirth) : null;
-        await db.query(`UPDATE public.players SET age=$1, updated_at=$2 WHERE id=$3`, [newAge, Date.now(), id]);
-      }
-      return res.json({ ok: true });
-    } else {
-      await db.query(sql, params);
-      return res.json({ ok: true });
+    // ✅ SIEMPRE public.players
+    const updateSql = `UPDATE public.players SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING birthdate`;
+    const { rows } = await db.query(updateSql, params);
+
+    if (shouldRecalcAge) {
+      const newBirth = rows?.[0]?.birthdate ?? null;
+      const newAge = newBirth ? calcAge(newBirth) : null;
+      await db.query(`UPDATE public.players SET age=$1, updated_at=$2 WHERE id=$3`, [newAge, Date.now(), id]);
     }
+
+    return res.json({ ok: true });
   } catch (e) {
     console.error('[players patch] error', e);
     return res.status(500).json({ error: 'Error del servidor' });
@@ -1316,7 +1340,7 @@ app.delete('/api/players/:id', authRequired, requireAdminOrStaff, async (req, re
   if (!requireDB(res)) return;
   try {
     const id = String(req.params.id);
-    // 👇 **CAMBIO CLAVE**: esquema calificado
+    // ✅ SIEMPRE public.players
     await db.query(`UPDATE public.players SET active=false, updated_at=$1 WHERE id=$2`, [Date.now(), id]);
     return res.json({ ok: true });
   } catch (e) {
@@ -1325,130 +1349,10 @@ app.delete('/api/players/:id', authRequired, requireAdminOrStaff, async (req, re
   }
 });
 
-/**
- * (Opcional) categorías por API
- * GET /api/meta/player-categories
- */
+// (Opcional) categorías por API
 app.get('/api/meta/player-categories', (_req, res) => {
   return res.json({ categories: PLAYER_CATEGORIES });
 });
-
-/**
- * POST /api/players
- * body: { first_name, last_name, dni?, phone?, birthdate?(ms), category }
- */
-app.post('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
-  if (!requireDB(res)) return;
-  try {
-    const { first_name = '', last_name = '', dni = '', phone = '', birthdate = null, category = '' } = req.body ?? {};
-    const fn = String(first_name).trim();
-    const ln = String(last_name).trim();
-    const cat = String(category).toUpperCase().trim();
-    if (!fn || !ln) return res.status(400).json({ error: 'Nombre y apellido son requeridos' });
-    if (cat && !PLAYER_CATEGORIES.includes(cat)) return res.status(400).json({ error: 'Categoría inválida' });
-
-    const now = Date.now();
-    const id = `p_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
-    const bms = birthdate == null ? null : Number(birthdate);
-    const age = bms ? calcAge(bms) : null;
-
-    const sql = `
-      INSERT INTO players (id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9)
-      RETURNING id
-    `;
-    const { rows } = await db.query(sql, [id, fn, ln, dni || null, phone || null, bms, age, cat || null, now]);
-    return res.status(201).json({ id: rows[0]?.id });
-  } catch (e) {
-    console.error('[players create] error', e);
-    return res.status(500).json({ error: 'Error del servidor' });
-  }
-});
-
-/**
- * PATCH /api/players/:id
- * body: { first_name?, last_name?, dni?, phone?, birthdate?(ms) , category?, active? }
- */
-app.patch('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res) => {
-  if (!requireDB(res)) return;
-  try {
-    const id = String(req.params.id);
-    const { first_name, last_name, dni, phone, birthdate, category, active } = req.body ?? {};
-
-    const fields = [];
-    const params = [];
-
-    if (typeof first_name === 'string') { fields.push(`first_name = $${fields.length+1}`); params.push(first_name.trim()); }
-    if (typeof last_name  === 'string') { fields.push(`last_name = $${fields.length+1}`);  params.push(last_name.trim());  }
-    if (typeof dni        === 'string') { fields.push(`dni = $${fields.length+1}`);        params.push(dni.trim() || null); }
-    if (typeof phone      === 'string') { fields.push(`phone = $${fields.length+1}`);      params.push(phone.trim() || null); }
-
-    // birthdate y age
-    let setAgeFromBirth = false;
-    if (birthdate != null) {
-      const bms = Number(birthdate);
-      fields.push(`birthdate = $${fields.length+1}`); params.push(Number.isNaN(bms) ? null : bms);
-      setAgeFromBirth = true;
-    }
-    if (typeof category === 'string') {
-      const cat = category.toUpperCase().trim();
-      if (cat && !PLAYER_CATEGORIES.includes(cat)) return res.status(400).json({ error: 'Categoría inválida' });
-      fields.push(`category = $${fields.length+1}`); params.push(cat || null);
-    }
-    if (typeof active === 'boolean') {
-      fields.push(`active = $${fields.length+1}`); params.push(active);
-    }
-    if (!fields.length) return res.json({ ok: true });
-
-    // updated_at
-    fields.push(`updated_at = $${fields.length+1}`); params.push(Date.now());
-    params.push(id);
-
-    // Si cambiamos birthdate, recalculamos age en la misma actualización
-    let sql = `UPDATE players SET ${fields.join(', ')} WHERE id = $${params.length}`;
-    if (setAgeFromBirth) {
-      sql += ` RETURNING birthdate`;
-      const { rows } = await db.query(sql, params);
-      if (rows && rows[0]) {
-        const newBirth = rows[0].birthdate;
-        const newAge = newBirth ? calcAge(newBirth) : null;
-        await db.query(`UPDATE players SET age=$1, updated_at=$2 WHERE id=$3`, [newAge, Date.now(), id]);
-      }
-      return res.json({ ok: true });
-    } else {
-      await db.query(sql, params);
-      return res.json({ ok: true });
-    }
-  } catch (e) {
-    console.error('[players patch] error', e);
-    return res.status(500).json({ error: 'Error del servidor' });
-  }
-});
-
-/**
- * DELETE /api/players/:id
- * Soft delete => active=false
- */
-app.delete('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res) => {
-  if (!requireDB(res)) return;
-  try {
-    const id = String(req.params.id);
-    await db.query(`UPDATE players SET active=false, updated_at=$1 WHERE id=$2`, [Date.now(), id]);
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('[players delete] error', e);
-    return res.status(500).json({ error: 'Error del servidor' });
-  }
-});
-
-/**
- * (Opcional) categorías por API
- * GET /api/meta/player-categories
- */
-app.get('/api/meta/player-categories', (_req, res) => {
-  return res.json({ categories: PLAYER_CATEGORIES });
-});
-
 // =========================================================
 // Startup: cargar DB -> memoria, luego listen
 // =========================================================

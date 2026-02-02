@@ -538,32 +538,6 @@ app.get('/uploads/:matchId/:filename', (req, res) => {
   }
 });
 
-// === Player Photos ===
-const PLAYER_UPLOADS_DIR = path.join(__dirname, 'public', 'uploads', 'players');
-ensureDir(PLAYER_UPLOADS_DIR);
-
-const playerPhotoStorage = multer.diskStorage({
-  destination: function (req, _file, cb) {
-    const playerId = req.params.id;
-    const dest = path.join(PLAYER_UPLOADS_DIR, playerId);
-    ensureDir(dest);
-    cb(null, dest);
-  },
-  filename: function (_req, file, cb) {
-    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-    cb(null, `${Date.now()}${ext}`);
-  },
-});
-
-const uploadPlayerPhoto = multer({
-  storage: playerPhotoStorage,
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype?.startsWith('image/')) cb(null, true);
-    else cb(new Error('Solo imágenes'));
-  },
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-});
-
 // =========================================================
 // Endpoints Meta
 // =========================================================

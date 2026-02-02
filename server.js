@@ -91,6 +91,35 @@ const MATCH_STAGES = [
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 ensureDir(UPLOADS_DIR);
 
+// =========================================================
+// Subidas (Multer) - Fotos de Jugadores (Players)
+// =========================================================
+const PLAYER_UPLOADS_DIR = path.join(__dirname, 'public', 'uploads', 'players');
+ensureDir(PLAYER_UPLOADS_DIR);
+
+const playerPhotoStorage = multer.diskStorage({
+  destination: function (req, _file, cb) {
+    const playerId = req.params.id;
+    const dest = path.join(PLAYER_UPLOADS_DIR, playerId);
+    ensureDir(dest);
+    cb(null, dest);
+  },
+  filename: function (_req, file, cb) {
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    cb(null, `${Date.now()}${ext}`);
+  },
+});
+
+const uploadPlayerPhoto = multer({
+  storage: playerPhotoStorage,
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype?.startsWith('image/')) cb(null, true);
+    else cb(new Error('Solo se permiten imágenes'));
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});
+
+
 
 // Categorías para jugadores (C1..C9, D1..D9)
 const PLAYER_CATEGORIES = [
@@ -507,6 +536,32 @@ app.get('/uploads/:matchId/:filename', (req, res) => {
     console.error('[UPLOADS GET] error', e);
     res.status(500).send('Server error');
   }
+});
+
+// === Player Photos ===
+const PLAYER_UPLOADS_DIR = path.join(__dirname, 'public', 'uploads', 'players');
+ensureDir(PLAYER_UPLOADS_DIR);
+
+const playerPhotoStorage = multer.diskStorage({
+  destination: function (req, _file, cb) {
+    const playerId = req.params.id;
+    const dest = path.join(PLAYER_UPLOADS_DIR, playerId);
+    ensureDir(dest);
+    cb(null, dest);
+  },
+  filename: function (_req, file, cb) {
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    cb(null, `${Date.now()}${ext}`);
+  },
+});
+
+const uploadPlayerPhoto = multer({
+  storage: playerPhotoStorage,
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype?.startsWith('image/')) cb(null, true);
+    else cb(new Error('Solo imágenes'));
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
 
 // =========================================================
@@ -1201,8 +1256,10 @@ app.get('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
 
     // ✅ SIEMPRE public.players
     const sql = `
-      SELECT id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at
-      FROM public.players
+      
+SELECT id, first_name, last_name, dni, phone, birthdate, age, category, active, photo_url, created_at, updated_at
+FROM public.players
+
       ${whereSql}
       ORDER BY ${orderBy}
       LIMIT $${params.length - 1} OFFSET $${params.length}
@@ -1331,6 +1388,40 @@ app.delete('/api/players/:id', authRequired, requireAdminOrStaff, async (req, re
     return res.status(500).json({ error: 'Error del servidor' });
   }
 });
+
+/**
+ * POST /api/players/:id/photo
+ * multipart/form-data con campo "file"
+ * Guarda archivo en /public/uploads/players/:id/
+ * y guarda la URL pública en public.players.photo_url
+ */
+app.post(
+  '/api/players/:id/photo',
+  authRequired,
+  requireAdminOrStaff,
+  uploadPlayerPhoto.single('file'),
+  async (req, res) => {
+    if (!requireDB(res)) return;
+    try {
+      const id = String(req.params.id);
+      if (!req.file) return res.status(400).json({ error: 'Falta archivo' });
+
+      const publicUrl = `/uploads/players/${id}/${path.basename(req.file.path)}`;
+      const now = Date.now();
+
+      await db.query(
+        `UPDATE public.players SET photo_url=$1, updated_at=$2 WHERE id=$3`,
+        [publicUrl, now, id]
+      );
+
+      return res.json({ ok: true, photo_url: publicUrl });
+    } catch (e) {
+      console.error('[players photo] error', e);
+      return res.status(500).json({ error: 'Error del servidor' });
+    }
+  }
+);
+``
 
 // (Opcional) categorías por API
 app.get('/api/meta/player-categories', (_req, res) => {

@@ -90,6 +90,7 @@ const state = {
     list: [],
     q: '',
     category: '',
+    showInactive: false,
     limit: 50,
     offset: 0,
     editingId: null, // null => creando
@@ -595,6 +596,22 @@ function startTicker(){
 /* =========================================================
  Jugadores (Players)
 ========================================================= */
+
+// --- UI helpers (form colapsable) ---
+function openPlayerForm(mode = 'new') {
+  const wrap = document.getElementById('pl_formWrap');
+  const title = document.getElementById('pl_formTitle');
+  if (wrap) wrap.style.display = 'block';
+  if (title) title.textContent = (mode === 'edit') ? 'Editar jugador' : 'Nuevo jugador';
+  wrap?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closePlayerForm() {
+  const wrap = document.getElementById('pl_formWrap');
+  if (wrap) wrap.style.display = 'none';
+  clearPlayerForm();
+}
+
 // Helpers
 function parseBirthToMs(val){
   // val viene yyyy-mm-dd => ms (local TZ)
@@ -612,92 +629,75 @@ function calcAgeFromMs(ms){
   return age;
 }
 
-// Render de listado de jugadores
-function renderPlayersList(players){
-  const list = $('#playersList');
-  list.innerHTML = '';
-  if (!players || !players.length) {
-    const empty = document.createElement('div');
-    empty.className = 'muted';
-    empty.textContent = 'No hay jugadores (o no coinciden con el filtro).';
-    list.appendChild(empty);
-    return;
-  }
-  players.forEach(p => {
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.style.padding = '10px';
-    const fullName = `${p.last_name ?? ''}, ${p.first_name ?? ''}`.trim();
-    const birthStr = p.birthdate ? new Date(Number(p.birthdate)).toLocaleDateString() : '—';
-    const ageStr = (p.age ?? '') === '' ? '—' : String(p.age ?? '—');
-    const cat = p.category ?? '—';
-    const phone = p.phone ?? '—';
-    const dni = p.dni ?? '—';
-    const active = p.active !== false;
-
-    card.innerHTML = `
-      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
-        <div style="min-width:260px;">
-          <div><strong>${fullName}</strong></div>
-          <div class="muted">DNI: ${dni} • Tel: ${phone}</div>
-          <div class="muted">Nac: ${birthStr} • Edad: ${ageStr} • Cat: ${cat}</div>
-          <div class="muted">ID: ${p.id}</div>
-        </div>
-        <div class="right">
-          <span class="badge">${active ? 'Activo' : 'Inactivo'}</span>
-        </div>
-      </div>
-      <div class="actions wrap" style="margin-top:8px;">
-        <button class="btn btn-pl-edit">Editar</button>
-        <button class="btn btn-pl-del">Desactivar</button>
-      </div>
-    `;
-
-    // wire actions
-    card.querySelector('.btn-pl-edit').addEventListener('click', () => {
-      // Setear edición en el form
-      state.players.editingId = p.id;
-      $('#pl_first').value = p.first_name ?? '';
-      $('#pl_last').value  = p.last_name ?? '';
-      $('#pl_dni').value   = p.dni ?? '';
-      $('#pl_tel').value   = p.phone ?? '';
-      // Birthdate -> yyyy-mm-dd
-      if (p.birthdate) {
-        const dt = new Date(Number(p.birthdate));
-        const y = dt.getFullYear();
-        const m = two(dt.getMonth()+1);
-        const d = two(dt.getDate());
-        $('#pl_birth').value = `${y}-${m}-${d}`;
-      } else {
-        $('#pl_birth').value = '';
-      }
-      $('#pl_age').value   = p.age ?? '';
-      $('#pl_cat').value   = p.category ?? '';
-      // Cambiamos texto del botón
-      $('#pl_save').textContent = 'Guardar cambios';
-      // Scroll al form
-      document.getElementById('playersSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-
-    card.querySelector('.btn-pl-del').addEventListener('click', async () => {
-      if (!confirm('¿Desactivar este jugador?')) return;
-      try {
-        await apiDelete(`/api/players/${p.id}`);
-        await loadPlayers(); // refresco
-      } catch (e) {
-        alert('No se pudo desactivar');
-      }
-    });
-
-    list.appendChild(card);
-  });
+function escHtml(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
+function statusDot(active) {
+  const color = active ? '#2ecc71' : '#e74c3c';
+  return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};"></span>`;
+}
+
+function renderPlayersTable(players) {
+  const tbody = document.getElementById('playersTbody');
+  if (!tbody) return;
+
+  if (!players || !players.length) {
+    tbody.innerHTML = `<tr><td colspan="11" class="muted">No hay jugadores (o no coinciden con el filtro).</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = players.map(p => {
+    const active = (p.active !== false);
+    const birthStr = p.birthdate ? new Date(Number(p.birthdate)).toLocaleDateString() : '—';
+    const ageStr = (p.age ?? '') === '' ? '—' : String(p.age);
+    const photoUrl = p.photo_url ? escHtml(p.photo_url) : '';
+
+    return `
+      <tr data-id="${escHtml(p.id)}" style="border-bottom:1px solid rgba(255,255,255,.10);">
+        <td style="padding:10px 8px;">${statusDot(active)}</td>
+        <td style="padding:10px 8px;">${escHtml(p.dni ?? '—')}</td>
+        <td style="padding:10px 8px;">${escHtml(p.first_name ?? '')}</td>
+        <td style="padding:10px 8px;">${escHtml(p.last_name ?? '')}</td>
+        <td style="padding:10px 8px;">${escHtml(p.category ?? '—')}</td>
+        <td style="padding:10px 8px;">${escHtml(p.phone ?? '—')}</td>
+        <td style="padding:10px 8px;">${escHtml(birthStr)}</td>
+        <td style="padding:10px 8px;">${escHtml(ageStr)}</td>
+        <td style="padding:10px 8px;">${active ? '✅' : '—'}</td>
+        <td style="padding:10px 8px;">
+          ${
+            photoUrl
+              ? `<img src="${photoUrl}" alt="Foto" style="width:34px;height:34px;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,.15);" />`
+              : `<span class="muted">—</span>`
+          }
+        </td>
+        <td style="padding:10px 8px; white-space:nowrap;">
+          <button class="btn btn-pl-edit" title="Editar">✏️</button>
+          ${
+            active
+              ? `<button class="btn btn-pl-del" title="Desactivar">🗑️</button>`
+              : `<button class="btn btn-pl-react" title="Reactivar">♻️</button>`
+          }
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // wire actions
+  tbody.querySelectorAll('.btn-pl-edit').forEach(b => b.addEventListener('click', onEditPlayerFromRow));
+  tbody.querySelectorAll('.btn-pl-del').forEach(b => b.addEventListener('click', onDeactivatePlayerFromRow));
+  tbody.querySelectorAll('.btn-pl-react').forEach(b => b.addEventListener('click', onReactivatePlayerFromRow));
+}
 async function loadPlayers(){
   const params = new URLSearchParams();
   if (state.players.q) params.set('q', state.players.q);
   if (state.players.category) params.set('category', state.players.category);
-  params.set('active', 'true');
+  params.set('active', state.players.showInactive ? 'false' : 'true');
   params.set('limit', String(state.players.limit));
   params.set('offset', String(state.players.offset));
   // sort default -created_at
@@ -706,10 +706,10 @@ async function loadPlayers(){
   try {
     const { players } = await apiGet(`/api/players?${params.toString()}`);
     state.players.list = players ?? [];
-    renderPlayersList(state.players.list);
+    renderPlayersTable(state.players.list);
   } catch (e) {
     console.error('No se pudo cargar jugadores', e);
-    renderPlayersList([]);
+    renderPlayersTable([]);
   }
 }
 
@@ -719,15 +719,36 @@ function onPlayerBirthChange(){
   $('#pl_age').value = age === '' ? '' : String(age);
 }
 
-async function savePlayer(){
+async function uploadPhoto(playerId, file) {
+  const fd = new FormData();
+  fd.append('file', file);
+
+  const res = await fetch(`/api/players/${playerId}/photo`, {
+    method: 'POST',
+    body: fd,
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Upload foto ${res.status}: ${txt}`);
+  }
+
+  return res.json();
+}
+
+
+async function savePlayer() {
   const payload = {
-    first_name: $('#pl_first').value.trim(),
-    last_name:  $('#pl_last').value.trim(),
-    dni:        $('#pl_dni').value.trim(),
-    phone:      $('#pl_tel').value.trim(),
-    birthdate:  parseBirthToMs($('#pl_birth').value),
-    category:   $('#pl_cat').value
+    first_name: document.getElementById('pl_first').value.trim(),
+    last_name: document.getElementById('pl_last').value.trim(),
+    dni: document.getElementById('pl_dni').value.trim(),
+    phone: document.getElementById('pl_tel').value.trim(),
+    birthdate: parseBirthToMs(document.getElementById('pl_birth').value),
+    category: document.getElementById('pl_cat').value
   };
+
+  const photoFile = document.getElementById('pl_photo')?.files?.[0] ?? null;
 
   if (!payload.first_name || !payload.last_name) {
     alert('Nombre y Apellido son requeridos');
@@ -735,15 +756,23 @@ async function savePlayer(){
   }
 
   try {
-    if (!state.players.editingId) {
+    let playerId = state.players.editingId;
+
+    if (!playerId) {
       // Crear
-      await apiPost('/api/players', payload);
-      clearPlayerForm();
+      const created = await apiPost('/api/players', payload);
+      playerId = created?.id;
     } else {
       // Editar
-      await apiPatch(`/api/players/${state.players.editingId}`, payload);
-      clearPlayerForm();
+      await apiPatch(`/api/players/${playerId}`, payload);
     }
+
+    // Subir foto si hay archivo
+    if (photoFile && playerId) {
+      await uploadPhoto(playerId, photoFile);
+    }
+
+    closePlayerForm();
     await loadPlayers();
   } catch (e) {
     alert('No se pudo guardar el jugador');
@@ -751,16 +780,25 @@ async function savePlayer(){
   }
 }
 
-function clearPlayerForm(){
+function clearPlayerForm() {
   state.players.editingId = null;
-  $('#pl_first').value = '';
-  $('#pl_last').value  = '';
-  $('#pl_dni').value   = '';
-  $('#pl_tel').value   = '';
-  $('#pl_birth').value = '';
-  $('#pl_age').value   = '';
-  $('#pl_cat').value   = '';
-  $('#pl_save').textContent = 'Guardar jugador';
+
+  document.getElementById('pl_first').value = '';
+  document.getElementById('pl_last').value = '';
+  document.getElementById('pl_dni').value = '';
+  document.getElementById('pl_tel').value = '';
+  document.getElementById('pl_birth').value = '';
+  document.getElementById('pl_age').value = '';
+  document.getElementById('pl_cat').value = '';
+
+  const photo = document.getElementById('pl_photo');
+  if (photo) photo.value = '';
+
+  const saveBtn = document.getElementById('pl_save');
+  if (saveBtn) saveBtn.textContent = 'Guardar jugador';
+
+  const title = document.getElementById('pl_formTitle');
+  if (title) title.textContent = 'Nuevo jugador';
 }
 
 let playersSearchDebounce = null;
@@ -775,6 +813,70 @@ function onPlayersSearch(ev){
 function onPlayersFilterCat(ev){
   state.players.category = ev.target.value ?? '';
   loadPlayers();
+}
+
+function fillPlayerFormFromPlayer(p) {
+  state.players.editingId = p.id;
+
+  document.getElementById('pl_first').value = p.first_name ?? '';
+  document.getElementById('pl_last').value = p.last_name ?? '';
+  document.getElementById('pl_dni').value = p.dni ?? '';
+  document.getElementById('pl_tel').value = p.phone ?? '';
+  document.getElementById('pl_cat').value = p.category ?? '';
+
+  // birthdate -> yyyy-mm-dd
+  if (p.birthdate) {
+    const dt = new Date(Number(p.birthdate));
+    const y = dt.getFullYear();
+    const m = two(dt.getMonth() + 1);
+    const d = two(dt.getDate());
+    document.getElementById('pl_birth').value = `${y}-${m}-${d}`;
+  } else {
+    document.getElementById('pl_birth').value = '';
+  }
+
+  document.getElementById('pl_age').value = p.age ?? '';
+  document.getElementById('pl_save').textContent = 'Guardar cambios';
+}
+
+function onEditPlayerFromRow(ev) {
+  const tr = ev.currentTarget.closest('tr');
+  const id = tr?.dataset?.id;
+  const p = state.players.list.find(x => x.id === id);
+  if (!p) return;
+
+  fillPlayerFormFromPlayer(p);
+  openPlayerForm('edit');
+}
+
+async function onDeactivatePlayerFromRow(ev) {
+  const tr = ev.currentTarget.closest('tr');
+  const id = tr?.dataset?.id;
+  if (!id) return;
+
+  if (!confirm('¿Desactivar este jugador?')) return;
+  try {
+    await apiDelete(`/api/players/${id}`);
+    await loadPlayers();
+  } catch (e) {
+    alert('No se pudo desactivar');
+    console.error(e);
+  }
+}
+
+async function onReactivatePlayerFromRow(ev) {
+  const tr = ev.currentTarget.closest('tr');
+  const id = tr?.dataset?.id;
+  if (!id) return;
+
+  if (!confirm('¿Reactivar este jugador?')) return;
+  try {
+    await apiPatch(`/api/players/${id}`, { active: true });
+    await loadPlayers();
+  } catch (e) {
+    alert('No se pudo reactivar');
+    console.error(e);
+  }
 }
 
 /* =========================================================
@@ -842,6 +944,20 @@ function bindUI(){
   $('#pl_filter_cat')?.addEventListener('change', onPlayersFilterCat);
   $('#pl_refreshBtn')?.addEventListener('click', loadPlayers);
   $('#pl_save')?.addEventListener('click', savePlayer);
+document.getElementById('pl_newBtn')?.addEventListener('click', () => {
+  clearPlayerForm();
+  openPlayerForm('new');
+});
+
+document.getElementById('pl_cancel')?.addEventListener('click', () => {
+  closePlayerForm();
+});
+
+document.getElementById('pl_showInactive')?.addEventListener('change', (ev) => {
+  state.players.showInactive = !!ev.target.checked;
+  loadPlayers();
+});
+
 }
 
 async function bootstrap(){

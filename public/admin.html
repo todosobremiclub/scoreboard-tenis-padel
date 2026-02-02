@@ -133,80 +133,148 @@
         <div class="top-tab active" data-top="matches">Partidos</div>
       </div>
 
-      <!-- === Sección: Jugadores === -->
-      <section id="playersSection" class="section">
-        <div class="form">
-          <h2>Jugadores</h2>
+      <!-- === Sección: Jugadores (UI nueva tipo grilla) === -->
+<section id="playersSection" class="section">
+  <div class="form">
+    <!-- Header + botón nuevo -->
+    <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+      <h2 style="margin:0;">Jugadores</h2>
 
-          <!-- Filtros / búsqueda -->
-          <div class="filterbar" style="grid-template-columns: 1fr 220px auto;">
-            <input id="pl_q" type="search" placeholder="Buscar por nombre, apellido, DNI o teléfono...">
-            <select id="pl_filter_cat">
-              <option value="">Todas las categorías</option>
-              <optgroup label="C">
-                <option value="C1">C1</option><option value="C2">C2</option><option value="C3">C3</option>
-                <option value="C4">C4</option><option value="C5">C5</option><option value="C6">C6</option>
-                <option value="C7">C7</option><option value="C8">C8</option><option value="C9">C9</option>
-              </optgroup>
-              <optgroup label="D">
-                <option value="D1">D1</option><option value="D2">D2</option><option value="D3">D3</option>
-                <option value="D4">D4</option><option value="D5">D5</option><option value="D6">D6</option>
-                <option value="D7">D7</option><option value="D8">D8</option><option value="D9">D9</option>
-              </optgroup>
-            </select>
-            <button id="pl_refreshBtn">Refrescar</button>
-          </div>
+      <button
+        id="pl_newBtn"
+        style="background:#f1c40f;color:#111;border:0;padding:10px 14px;border-radius:8px;font-weight:900;cursor:pointer;"
+      >
+        Generar nuevo jugador
+      </button>
+    </div>
 
-          <!-- Formulario de alta/edición rápida -->
-          <div class="grid-2">
-            <div>
-              <label>Nombre</label>
-              <input id="pl_first" type="text" placeholder="Juan">
-            </div>
-            <div>
-              <label>Apellido</label>
-              <input id="pl_last" type="text" placeholder="Pérez">
-            </div>
-            <div>
-              <label>DNI</label>
-              <input id="pl_dni" type="text" placeholder="12345678">
-            </div>
-            <div>
-              <label>Teléfono</label>
-              <input id="pl_tel" type="text" placeholder="+54 11 ....">
-            </div>
-            <div>
-              <label>Fecha de nacimiento</label>
-              <input id="pl_birth" type="date">
-            </div>
-            <div>
-              <label>Edad</label>
-              <input id="pl_age" type="number" readonly placeholder="—">
-            </div>
-            <div>
-              <label>Categoría</label>
-              <select id="pl_cat">
-                <optgroup label="C">
-                  <option value="C1">C1</option><option value="C2">C2</option><option value="C3">C3</option>
-                  <option value="C4">C4</option><option value="C5">C5</option><option value="C6">C6</option>
-                  <option value="C7">C7</option><option value="C8">C8</option><option value="C9">C9</option>
-                </optgroup>
-                <optgroup label="D">
-                  <option value="D1">D1</option><option value="D2">D2</option><option value="D3">D3</option>
-                  <option value="D4">D4</option><option value="D5">D5</option><option value="D6">D6</option>
-                  <option value="D7">D7</option><option value="D8">D8</option><option value="D9">D9</option>
-                </optgroup>
-              </select>
-            </div>
-          </div>
-          <div class="wrap" style="margin-top:12px;">
-            <button id="pl_save">Guardar jugador</button>
-          </div>
+    <!-- Filtros -->
+    <div class="filterbar" style="grid-template-columns: 1fr 220px 220px auto; margin-top:12px;">
+      <input id="pl_q" type="search" placeholder="Buscar por nombre, apellido o DNI..." />
 
-          <h3 style="margin-top:20px;">Listado</h3>
-          <div id="playersList" class="list"></div>
+      <select id="pl_filter_cat">
+        <option value="">Todas las categorías</option>
+
+        <optgroup label="C">
+          <option value="C1">C1</option><option value="C2">C2</option><option value="C3">C3</option>
+          <option value="C4">C4</option><option value="C5">C5</option><option value="C6">C6</option>
+          <option value="C7">C7</option><option value="C8">C8</option><option value="C9">C9</option>
+        </optgroup>
+
+        <optgroup label="D">
+          <option value="D1">D1</option><option value="D2">D2</option><option value="D3">D3</option>
+          <option value="D4">D4</option><option value="D5">D5</option><option value="D6">D6</option>
+          <option value="D7">D7</option><option value="D8">D8</option><option value="D9">D9</option>
+        </optgroup>
+      </select>
+
+      <label style="display:flex;gap:8px;align-items:center;color:#cfd8d3;font-size:13px;">
+        <input id="pl_showInactive" type="checkbox" />
+        Ver inactivos
+      </label>
+
+      <button id="pl_refreshBtn">Refrescar</button>
+    </div>
+
+    <!-- Form colapsable -->
+    <div
+      id="pl_formWrap"
+      style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(255,255,255,.14);"
+    >
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h3 id="pl_formTitle" style="margin:0;">Nuevo jugador</h3>
+        <small class="muted" style="margin:0;">Completá los datos y guardá.</small>
+      </div>
+
+      <div class="grid-2" style="margin-top:10px;">
+        <div>
+          <label>Nombre</label>
+          <input id="pl_first" type="text" placeholder="Juan" />
         </div>
-      </section>
+
+        <div>
+          <label>Apellido</label>
+          <input id="pl_last" type="text" placeholder="Pérez" />
+        </div>
+
+        <div>
+          <label>DNI</label>
+          <input id="pl_dni" type="text" placeholder="12345678" />
+        </div>
+
+        <div>
+          <label>Teléfono</label>
+          <input id="pl_tel" type="text" placeholder="+54 11..." />
+        </div>
+
+        <div>
+          <label>Fecha de nacimiento</label>
+          <input id="pl_birth" type="date" />
+        </div>
+
+        <div>
+          <label>Edad</label>
+          <input id="pl_age" type="number" readonly placeholder="—" />
+        </div>
+
+        <div>
+          <label>Categoría</label>
+          <select id="pl_cat">
+            <optgroup label="C">
+              <option value="C1">C1</option><option value="C2">C2</option><option value="C3">C3</option>
+              <option value="C4">C4</option><option value="C5">C5</option><option value="C6">C6</option>
+              <option value="C7">C7</option><option value="C8">C8</option><option value="C9">C9</option>
+            </optgroup>
+            <optgroup label="D">
+              <option value="D1">D1</option><option value="D2">D2</option><option value="D3">D3</option>
+              <option value="D4">D4</option><option value="D5">D5</option><option value="D6">D6</option>
+              <option value="D7">D7</option><option value="D8">D8</option><option value="D9">D9</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div>
+          <label>Foto</label>
+          <input id="pl_photo" type="file" accept="image/*" />
+          <small class="muted">JPG/PNG/WebP • Máx 5MB</small>
+        </div>
+      </div>
+
+      <div class="wrap" style="margin-top:12px;">
+        <button id="pl_save">Guardar jugador</button>
+        <button id="pl_cancel" class="btn">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Tabla de jugadores -->
+    <h3 style="margin-top:18px;">Listado</h3>
+    <div style="overflow:auto;">
+      <table id="playersTable" style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th>Estado</th>
+            <th>DNI</th>
+            <th>Nombre</th>
+            <th>Apellido</th>
+            <th>Categoría</th>
+            <th>Teléfono</th>
+            <th>Nacimiento</th>
+            <th>Edad</th>
+            <th>Activo</th>
+            <th>Foto</th>
+            <th>Opciones</th>
+          </tr>
+        </thead>
+        <tbody id="playersTbody">
+          <tr>
+            <td colspan="11" class="muted">Sin datos…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
 
       <!-- === Sección: Torneos (placeholder — Fase 2) === -->
       <section id="tournamentsSection" class="section">

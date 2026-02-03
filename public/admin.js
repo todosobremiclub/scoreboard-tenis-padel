@@ -97,6 +97,16 @@ const state = {
     // cache de categorías (opcional)
     categories: ['C1','C2','C3','C4','C5','C6','C7','C8','C9','D1','D2','D3','D4','D5','D6','D7','D8','D9']
   }
+
+tournaments: {
+  list: [],
+  q: '',
+  category: '',
+  status: '',
+  limit: 50,
+  offset: 0,
+  editingId: null
+}
 };
 
 // --- Publicidad (Ads)
@@ -594,6 +604,216 @@ function startTicker(){
 }
 
 /* =========================================================
+ Torneos (Tournaments)
+========================================================= */
+// UI helpers (form colapsable)
+function openTournamentForm(mode = 'new') {
+  const wrap = document.getElementById('tr_formWrap');
+  const title = document.getElementById('tr_formTitle');
+  if (wrap) wrap.style.display = 'block';
+  if (title) title.textContent = (mode === 'edit') ? 'Editar torneo' : 'Nuevo torneo';
+  wrap?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeTournamentForm() {
+  const wrap = document.getElementById('tr_formWrap');
+  if (wrap) wrap.style.display = 'none';
+  clearTournamentForm();
+}
+
+function renderTournamentsTable(tournaments) {
+  const tbody = document.getElementById('tournamentsTbody');
+  if (!tbody) return;
+
+  if (!tournaments || !tournaments.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="muted">No hay torneos (o no coinciden con el filtro).</td></tr>`;
+    return;
+  }
+
+  const esc = (s) => String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+
+  const fmtDate = (val) => {
+    if (!val) return '—';
+    // soporta ms epoch o yyyy-mm-dd
+    const d = new Date(val);
+    if (Number.isNaN(d.getTime())) return esc(val);
+    return d.toLocaleDateString();
+  };
+
+  const statusLabel = (st) => {
+    const map = {
+      draft: 'Borrador',
+      open: 'Inscripción',
+      running: 'En curso',
+      finished: 'Finalizado'
+    };
+    return map[st] ?? (st ?? '—');
+  };
+
+  const formatLabel = (f) => {
+    const map = {
+      league: 'Liga',
+      groups: 'Grupos',
+      knockout: 'Eliminación'
+    };
+    return map[f] ?? (f ?? '—');
+  };
+
+  tbody.innerHTML = tournaments.map(t => `
+    <tr data-id="${esc(t.id)}" style="border-bottom:1px solid rgba(255,255,255,.10);">
+      <td style="padding:10px 8px;">${esc(statusLabel(t.status))}</td>
+      <td style="padding:10px 8px;">${esc(t.name)}</td>
+      <td style="padding:10px 8px;">${esc(t.category ?? '—')}</td>
+      <td style="padding:10px 8px;">${esc(formatLabel(t.format))}</td>
+      <td style="padding:10px 8px;">${esc(t.pairs ?? '—')}</td>
+      <td style="padding:10px 8px;">${fmtDate(t.date)}</td>
+      <td style="padding:10px 8px; white-space:nowrap;">
+        <button class="btn btn-tr-edit" title="Editar">✏️</button>
+        <button class="btn btn-tr-del" title="Eliminar">🗑️</button>
+      </td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('.btn-tr-edit').forEach(b => b.addEventListener('click', onEditTournamentFromRow));
+  tbody.querySelectorAll('.btn-tr-del').forEach(b => b.addEventListener('click', onDeleteTournamentFromRow));
+}
+
+async function loadTournaments() {
+  const params = new URLSearchParams();
+  if (state.tournaments.q) params.set('q', state.tournaments.q);
+  if (state.tournaments.category) params.set('category', state.tournaments.category);
+  if (state.tournaments.status) params.set('status', state.tournaments.status);
+  params.set('limit', String(state.tournaments.limit));
+  params.set('offset', String(state.tournaments.offset));
+  params.set('sort', '-created_at');
+
+  try {
+    const data = await apiGet(`/api/tournaments?${params.toString()}`);
+    const list = data.tournaments ?? data.items ?? [];
+    state.tournaments.list = list;
+    renderTournamentsTable(list);
+  } catch (e) {
+    console.error('No se pudo cargar torneos', e);
+    renderTournamentsTable([]);
+  }
+}
+
+function fillTournamentFormFromTournament(t) {
+  state.tournaments.editingId = t.id;
+
+  const name = document.getElementById('tr_name');
+  const cat = document.getElementById('tr_category');
+  const format = document.getElementById('tr_format');
+  const pairs = document.getElementById('tr_pairs');
+  const status = document.getElementById('tr_status');
+  const date = document.getElementById('tr_date');
+
+  if (name) name.value = t.name ?? '';
+  if (cat) cat.value = t.category ?? '';
+  if (format) format.value = t.format ?? 'league';
+  if (pairs) pairs.value = String(t.pairs ?? 8);
+  if (status) status.value = t.status ?? 'draft';
+
+  // date: soportar ms o string yyyy-mm-dd
+  if (date) {
+    if (!t.date) date.value = '';
+    else {
+      const d = new Date(t.date);
+      if (!Number.isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        date.value = `${y}-${m}-${day}`;
+      } else {
+        date.value = String(t.date);
+      }
+    }
+  }
+
+  const saveBtn = document.getElementById('tr_save');
+  if (saveBtn) saveBtn.textContent = 'Guardar cambios';
+}
+
+function onEditTournamentFromRow(ev) {
+  const tr = ev.currentTarget.closest('tr');
+  const id = tr?.dataset?.id;
+  const t = state.tournaments.list.find(x => String(x.id) === String(id));
+  if (!t) return;
+  fillTournamentFormFromTournament(t);
+  openTournamentForm('edit');
+}
+
+async function onDeleteTournamentFromRow(ev) {
+  const tr = ev.currentTarget.closest('tr');
+  const id = tr?.dataset?.id;
+  if (!id) return;
+  if (!confirm('¿Eliminar este torneo?')) return;
+
+  try {
+    await apiDelete(`/api/tournaments/${id}`);
+    await loadTournaments();
+  } catch (e) {
+    alert('No se pudo eliminar el torneo');
+    console.error(e);
+  }
+}
+
+async function saveTournament() {
+  const payload = {
+    name: document.getElementById('tr_name')?.value?.trim() ?? '',
+    category: document.getElementById('tr_category')?.value ?? '',
+    format: document.getElementById('tr_format')?.value ?? 'league',
+    pairs: parseInt(document.getElementById('tr_pairs')?.value ?? '8', 10),
+    status: document.getElementById('tr_status')?.value ?? 'draft',
+    date: document.getElementById('tr_date')?.value ?? ''
+  };
+
+  if (!payload.name) {
+    alert('El nombre del torneo es requerido');
+    return;
+  }
+
+  try {
+    if (!state.tournaments.editingId) {
+      await apiPost('/api/tournaments', payload);
+    } else {
+      await apiPatch(`/api/tournaments/${state.tournaments.editingId}`, payload);
+    }
+
+    closeTournamentForm();
+    await loadTournaments();
+  } catch (e) {
+    alert('No se pudo guardar el torneo');
+    console.error(e);
+  }
+}
+
+function clearTournamentForm() {
+  state.tournaments.editingId = null;
+  const name = document.getElementById('tr_name');
+  const cat = document.getElementById('tr_category');
+  const format = document.getElementById('tr_format');
+  const pairs = document.getElementById('tr_pairs');
+  const status = document.getElementById('tr_status');
+  const date = document.getElementById('tr_date');
+  if (name) name.value = '';
+  if (cat) cat.value = '';
+  if (format) format.value = 'league';
+  if (pairs) pairs.value = '8';
+  if (status) status.value = 'draft';
+  if (date) date.value = '';
+  const saveBtn = document.getElementById('tr_save');
+  if (saveBtn) saveBtn.textContent = 'Guardar torneo';
+  const title = document.getElementById('tr_formTitle');
+  if (title) title.textContent = 'Nuevo torneo';
+}
+
+/* =========================================================
  Jugadores (Players)
 ========================================================= */
 
@@ -901,6 +1121,7 @@ function bindTopTabs(){
     activateTopTab(btn.dataset.top);
     // on change, si voy a jugadores => refresco
     if (btn.dataset.top === 'players') loadPlayers();
+if (btn.dataset.top === 'tournaments') loadTournaments();
   });
   // por defecto matches
   activateTopTab('matches');
@@ -959,6 +1180,40 @@ document.getElementById('pl_showInactive')?.addEventListener('change', (ev) => {
 });
 
 }
+
+// === Torneos
+  document.getElementById('tr_newBtn')?.addEventListener('click', () => {
+    clearTournamentForm();
+    openTournamentForm('new');
+  });
+
+  document.getElementById('tr_cancel')?.addEventListener('click', () => {
+    closeTournamentForm();
+  });
+
+  document.getElementById('tr_save')?.addEventListener('click', saveTournament);
+
+  document.getElementById('tr_q')?.addEventListener('input', (ev) => {
+    const q = ev.target.value ?? '';
+    clearTimeout(window.__trSearchDebounce);
+    window.__trSearchDebounce = setTimeout(() => {
+      state.tournaments.q = q.trim();
+      loadTournaments();
+    }, 350);
+  });
+
+  document.getElementById('tr_filter_cat')?.addEventListener('change', (ev) => {
+    state.tournaments.category = ev.target.value ?? '';
+    loadTournaments();
+  });
+
+  document.getElementById('tr_filter_status')?.addEventListener('change', (ev) => {
+    state.tournaments.status = ev.target.value ?? '';
+    loadTournaments();
+  });
+
+  document.getElementById('tr_refreshBtn')?.addEventListener('click', loadTournaments);
+
 
 async function bootstrap(){
   bindUI();

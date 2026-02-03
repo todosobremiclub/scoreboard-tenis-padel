@@ -271,7 +271,6 @@ async function upsertTournamentToDb(tournament) {
   const now = Date.now();
   const createdAt = tournament.created_at ?? now;
   const updatedAt = tournament.updated_at ?? now;
-
   await db.query(
     `INSERT INTO public.tournaments (id, created_at, updated_at, data)
      VALUES ($1, $2, $3, $4::jsonb)

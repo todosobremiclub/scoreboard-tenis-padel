@@ -166,6 +166,12 @@ const upload = multer({
 /** @type {Map<string, any>} */ const matchesHistory = new Map();  // finished
 
 // =========================================================
+// Estado en memoria (torneos)
+// =========================================================
+/** @type {Map<string, any>} */ const tournaments = new Map(); // id -> torneo
+``
+
+// =========================================================
 // Persistencia de Partidos en Postgres (public.matches)
 // =========================================================
 const _pendingSaveTimers = new Map(); // matchId -> timeout
@@ -275,6 +281,22 @@ async function loadMatchesFromDb() {
 function generateId() {
   return Math.random().toString(36).slice(2, 8);
 }
+
+function generateTournamentId() {
+  return `t_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeTournamentPayload(body = {}) {
+  const name = String(body.name ?? '').trim();
+  const category = String(body.category ?? '').trim().toUpperCase() || null;
+  const format = String(body.format ?? 'league').trim();
+  const pairs = Number.isFinite(Number(body.pairs)) ? Number(body.pairs) : 8;
+  const status = String(body.status ?? 'draft').trim();
+  const date = String(body.date ?? '').trim() || null; // yyyy-mm-dd
+
+  return { name, category, format, pairs, status, date };
+}
+``
 
 function newSet() {
   return { gamesA: 0, gamesB: 0, tieBreak: { active: false, pointsA: 0, pointsB: 0 } };
@@ -542,6 +564,92 @@ app.get('/uploads/:matchId/:filename', (req, res) => {
 // Endpoints Meta
 // =========================================================
 app.get('/api/meta/stages', (_req, res) => res.json({ stages: MATCH_STAGES }));
+
+// =========================================================
+// Endpoints Torneos (REST)
+// =========================================================
+
+// GET /api/tournaments?q=&category=&status=&limit=&offset=&sort=-created_at
+app.get('/api/tournaments', (req, res) => {
+  const q = String(req.query.q ?? '').trim().toLowerCase();
+  const category = String(req.query.category ?? '').trim().toUpperCase();
+  const status = String(req.query.status ?? '').trim();
+  const sort = String(req.query.sort ?? '-created_at');
+
+  const limit = Math.min(parseInt(req.query.limit ?? '50', 10), 200);
+  const offset = Math.max(parseInt(req.query.offset ?? '0', 10), 0);
+
+  let list = Array.from(tournaments.values());
+
+  if (q) {
+    list = list.filter(t => String(t.name ?? '').toLowerCase().includes(q));
+  }
+  if (category) {
+    list = list.filter(t => String(t.category ?? '').toUpperCase() === category);
+  }
+  if (status) {
+    list = list.filter(t => String(t.status ?? '') === status);
+  }
+
+  // sort básico
+  const desc = sort.startsWith('-');
+  const field = sort.replace(/^-/, '');
+  list.sort((a, b) => {
+    const av = a[field] ?? 0;
+    const bv = b[field] ?? 0;
+    if (av === bv) return 0;
+    return (av > bv ? 1 : -1) * (desc ? -1 : 1);
+  });
+
+  const paged = list.slice(offset, offset + limit);
+  return res.json({ tournaments: paged, limit, offset, total: list.length });
+});
+
+// POST /api/tournaments
+app.post('/api/tournaments', (req, res) => {
+  const payload = normalizeTournamentPayload(req.body ?? {});
+  if (!payload.name) return res.status(400).json({ error: 'Nombre requerido' });
+
+  const now = Date.now();
+  const id = generateTournamentId();
+
+  const t = {
+    id,
+    ...payload,
+    created_at: now,
+    updated_at: now,
+  };
+
+  tournaments.set(id, t);
+  return res.status(201).json({ id });
+});
+
+// PATCH /api/tournaments/:id
+app.patch('/api/tournaments/:id', (req, res) => {
+  const id = String(req.params.id);
+  const existing = tournaments.get(id);
+  if (!existing) return res.status(404).json({ error: 'No encontrado' });
+
+  const payload = normalizeTournamentPayload({ ...existing, ...req.body });
+  if (!payload.name) return res.status(400).json({ error: 'Nombre requerido' });
+
+  const updated = {
+    ...existing,
+    ...payload,
+    updated_at: Date.now(),
+  };
+
+  tournaments.set(id, updated);
+  return res.json({ ok: true });
+});
+
+// DELETE /api/tournaments/:id
+app.delete('/api/tournaments/:id', (req, res) => {
+  const id = String(req.params.id);
+  const existed = tournaments.delete(id);
+  if (!existed) return res.status(404).json({ error: 'No encontrado' });
+  return res.json({ ok: true });
+});
 
 // =========================================================
 // Endpoints Partidos (REST)

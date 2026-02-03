@@ -73,6 +73,16 @@ function dbEnabled() {
   return !!db;
 }
 
+app.get('/api/meta/dbinfo', async (_req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const r = await db.query('SELECT current_database() AS db, current_schema() AS schema');
+    res.json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: 'dbinfo failed' });
+  }
+});
+
 
 // =========================================================
 // Config / Constantes (partidos)
@@ -337,7 +347,6 @@ function normalizeTournamentPayload(body = {}) {
   const pairs = Number.isFinite(Number(body.pairs)) ? Number(body.pairs) : 8;
   const status = String(body.status ?? 'draft').trim();
   const date = String(body.date ?? '').trim() || null;
-
   return { name, category, format, pairs, status, date };
 }
 
@@ -649,7 +658,9 @@ app.get('/api/tournaments', (req, res) => {
 });
 
 // POST /api/tournaments
-app.post('/api/tournaments', (req, res) => {
+app.post('/api/tournaments', async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
   const payload = normalizeTournamentPayload(req.body ?? {});
   if (!payload.name) return res.status(400).json({ error: 'Nombre requerido' });
 
@@ -664,12 +675,21 @@ app.post('/api/tournaments', (req, res) => {
   };
 
   tournaments.set(id, t);
-upsertTournamentToDb(t).catch((e) => console.error('[DB tournaments] upsert error', e));
+await upsertTournamentToDb(t);
 return res.status(201).json({ id });
+
+} catch (e) {
+    console.error('[DB tournaments] upsert error', e);
+    return res.status(500).json({ error: 'No se pudo guardar el torneo en DB' });
+  }
+});
+
 });
 
 // PATCH /api/tournaments/:id
-app.patch('/api/tournaments/:id', (req, res) => {
+app.patch('/api/tournaments/:id', async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
   const id = String(req.params.id);
   const existing = tournaments.get(id);
   if (!existing) return res.status(404).json({ error: 'No encontrado' });
@@ -683,19 +703,31 @@ app.patch('/api/tournaments/:id', (req, res) => {
     updated_at: Date.now(),
   };
 
-  tournaments.set(id, updated);
-upsertTournamentToDb(updated).catch((e) => console.error('[DB tournaments] upsert error', e));
+  tournaments.set(id, updattournaments.set(id, updated);
+await upsertTournamentToDb(updated);
 return res.json({ ok: true });
+} catch (e) {
+    console.error('[DB tournaments] upsert error', e);
+    return res.status(500).json({ error: 'No se pudo actualizar el torneo en DB' });
+  }
+});
 });
 
 // DELETE /api/tournaments/:id
-app.delete('/api/tournaments/:id', (req, res) => {
+app.delete('/api/tournaments/:id', async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
   const id = String(req.params.id);
   const existed = tournaments.delete(id);
 if (!existed) return res.status(404).json({ error: 'No encontrado' });
 
-deleteTournamentFromDb(id).catch((e) => console.error('[DB tournaments] delete error', e));
+await deleteTournamentFromDb(id);
 return res.json({ ok: true });
+} catch (e) {
+    console.error('[DB tournaments] delete error', e);
+    return res.status(500).json({ error: 'No se pudo borrar el torneo en DB' });
+  }
+});
 });
 
 // =========================================================

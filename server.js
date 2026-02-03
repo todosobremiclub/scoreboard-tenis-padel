@@ -276,6 +276,63 @@ async function loadMatchesFromDb() {
 }
 
 // =========================================================
+// Persistencia de Torneos en Postgres (public.tournaments)
+// =========================================================
+async function upsertTournamentToDb(tournament) {
+  if (!dbEnabled()) return;
+  const now = Date.now();
+  const createdAt = tournament.created_at ?? now;
+  const updatedAt = tournament.updated_at ?? now;
+
+  await db.query(
+    `INSERT INTO public.tournaments (id, created_at, updated_at, data)
+     VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (id) DO UPDATE SET
+       updated_at = EXCLUDED.updated_at,
+       data = EXCLUDED.data`,
+    [
+      tournament.id,
+      createdAt,
+      updatedAt,
+      JSON.stringify(tournament),
+    ]
+  );
+}
+
+async function deleteTournamentFromDb(id) {
+  if (!dbEnabled()) return;
+  await db.query(`DELETE FROM public.tournaments WHERE id = $1`, [id]);
+}
+
+async function loadTournamentsFromDb() {
+  if (!dbEnabled()) return;
+  try {
+    const { rows } = await db.query(
+      `SELECT id, created_at, updated_at, data
+       FROM public.tournaments`
+    );
+
+    tournaments.clear();
+
+    for (const r of rows) {
+      let t = r.data ?? {};
+      if (typeof t === 'string') {
+        try { t = JSON.parse(t); } catch { t = {}; }
+      }
+      t.id = r.id;
+      t.created_at = Number(r.created_at ?? Date.now());
+      t.updated_at = Number(r.updated_at ?? Date.now());
+
+      tournaments.set(t.id, t);
+    }
+
+    console.log(`[DB tournaments] Cargados: ${tournaments.size}`);
+  } catch (e) {
+    console.error('[DB tournaments] load error', e);
+  }
+}
+
+// =========================================================
 // Utilidades (partidos)
 // =========================================================
 function generateId() {
@@ -620,7 +677,8 @@ app.post('/api/tournaments', (req, res) => {
   };
 
   tournaments.set(id, t);
-  return res.status(201).json({ id });
+upsertTournamentToDb(t).catch((e) => console.error('[DB tournaments] upsert error', e));
+return res.status(201).json({ id });
 });
 
 // PATCH /api/tournaments/:id
@@ -639,15 +697,18 @@ app.patch('/api/tournaments/:id', (req, res) => {
   };
 
   tournaments.set(id, updated);
-  return res.json({ ok: true });
+upsertTournamentToDb(updated).catch((e) => console.error('[DB tournaments] upsert error', e));
+return res.json({ ok: true });
 });
 
 // DELETE /api/tournaments/:id
 app.delete('/api/tournaments/:id', (req, res) => {
   const id = String(req.params.id);
   const existed = tournaments.delete(id);
-  if (!existed) return res.status(404).json({ error: 'No encontrado' });
-  return res.json({ ok: true });
+if (!existed) return res.status(404).json({ error: 'No encontrado' });
+
+deleteTournamentFromDb(id).catch((e) => console.error('[DB tournaments] delete error', e));
+return res.json({ ok: true });
 });
 
 // =========================================================
@@ -1514,6 +1575,7 @@ app.get('/api/meta/player-categories', (_req, res) => {
 (async () => {
   if (dbEnabled()) {
     await loadMatchesFromDb();
+await loadTournamentsFromDb();
   } else {
     console.warn('[DB matches] DB no disponible, se usará memoria solamente.');
   }

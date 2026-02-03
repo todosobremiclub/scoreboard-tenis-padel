@@ -926,17 +926,15 @@ app.delete('/api/matches/:id', async (req, res) => {
 
     io.to(id).emit('deleted', { id });
 
-    return res.json({
-      ok: true,
-      deleted: { active: inActive, history: inHistory },
-      deleteAds,
-      db: dbEnabled(),
-    });
-  } catch (e) {
-    console.error('[matches delete] error', e);
-    return res.status(500).json({ error: 'Error del servidor' });
+   
+return res.json({ ok: true, photo_url: publicUrl });
+} catch (e) {
+  console.error('[players photo] error', e);
+  return res.status(500).json({ error: 'Error del servidor' });
+}
   }
-});
+);
+
 
 // =========================================================
 // Publicidad (Ads)

@@ -96,8 +96,7 @@ const state = {
     editingId: null, // null => creando
     // cache de categorías (opcional)
     categories: ['C1','C2','C3','C4','C5','C6','C7','C8','C9','D1','D2','D3','D4','D5','D6','D7','D8','D9']
-  }
-
+ },
 tournaments: {
   list: [],
   q: '',
@@ -1179,8 +1178,6 @@ document.getElementById('pl_showInactive')?.addEventListener('change', (ev) => {
   loadPlayers();
 });
 
-}
-
 // === Torneos
   document.getElementById('tr_newBtn')?.addEventListener('click', () => {
     clearTournamentForm();
@@ -1213,6 +1210,9 @@ document.getElementById('pl_showInactive')?.addEventListener('change', (ev) => {
   });
 
   document.getElementById('tr_refreshBtn')?.addEventListener('click', loadTournaments);
+
+}
+
 
 
 async function bootstrap(){

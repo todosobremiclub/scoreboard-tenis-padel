@@ -633,17 +633,10 @@ app.get('/api/tournaments', (req, res) => {
 
   let list = Array.from(tournaments.values());
 
-  if (q) {
-    list = list.filter(t => String(t.name ?? '').toLowerCase().includes(q));
-  }
-  if (category) {
-    list = list.filter(t => String(t.category ?? '').toUpperCase() === category);
-  }
-  if (status) {
-    list = list.filter(t => String(t.status ?? '') === status);
-  }
+  if (q) list = list.filter(t => String(t.name ?? '').toLowerCase().includes(q));
+  if (category) list = list.filter(t => String(t.category ?? '').toUpperCase() === category);
+  if (status) list = list.filter(t => String(t.status ?? '') === status);
 
-  // sort básico
   const desc = sort.startsWith('-');
   const field = sort.replace(/^-/, '');
   list.sort((a, b) => {
@@ -661,75 +654,63 @@ app.get('/api/tournaments', (req, res) => {
 app.post('/api/tournaments', async (req, res) => {
   if (!requireDB(res)) return;
   try {
-  const payload = normalizeTournamentPayload(req.body ?? {});
-  if (!payload.name) return res.status(400).json({ error: 'Nombre requerido' });
+    const payload = normalizeTournamentPayload(req.body ?? {});
+    if (!payload.name) return res.status(400).json({ error: 'Nombre requerido' });
 
-  const now = Date.now();
-  const id = generateTournamentId();
+    const now = Date.now();
+    const id = generateTournamentId();
 
-  const t = {
-    id,
-    ...payload,
-    created_at: now,
-    updated_at: now,
-  };
+    const t = { id, ...payload, created_at: now, updated_at: now };
 
-  tournaments.set(id, t);
-await upsertTournamentToDb(t);
-return res.status(201).json({ id });
+    tournaments.set(id, t);
+    await upsertTournamentToDb(t);
 
-} catch (e) {
+    return res.status(201).json({ id });
+  } catch (e) {
     console.error('[DB tournaments] upsert error', e);
     return res.status(500).json({ error: 'No se pudo guardar el torneo en DB' });
   }
-});
-
 });
 
 // PATCH /api/tournaments/:id
 app.patch('/api/tournaments/:id', async (req, res) => {
   if (!requireDB(res)) return;
   try {
-  const id = String(req.params.id);
-  const existing = tournaments.get(id);
-  if (!existing) return res.status(404).json({ error: 'No encontrado' });
+    const id = String(req.params.id);
+    const existing = tournaments.get(id);
+    if (!existing) return res.status(404).json({ error: 'No encontrado' });
 
-  const payload = normalizeTournamentPayload({ ...existing, ...req.body });
-  if (!payload.name) return res.status(400).json({ error: 'Nombre requerido' });
+    const payload = normalizeTournamentPayload({ ...existing, ...req.body });
+    if (!payload.name) return res.status(400).json({ error: 'Nombre requerido' });
 
-  const updated = {
-    ...existing,
-    ...payload,
-    updated_at: Date.now(),
-  };
+    const updated = { ...existing, ...payload, updated_at: Date.now() };
 
-  tournaments.set(id, updattournaments.set(id, updated);
-await upsertTournamentToDb(updated);
-return res.json({ ok: true });
-} catch (e) {
+    tournaments.set(id, updated);
+    await upsertTournamentToDb(updated);
+
+    return res.json({ ok: true });
+  } catch (e) {
     console.error('[DB tournaments] upsert error', e);
     return res.status(500).json({ error: 'No se pudo actualizar el torneo en DB' });
   }
-});
 });
 
 // DELETE /api/tournaments/:id
 app.delete('/api/tournaments/:id', async (req, res) => {
   if (!requireDB(res)) return;
   try {
-  const id = String(req.params.id);
-  const existed = tournaments.delete(id);
-if (!existed) return res.status(404).json({ error: 'No encontrado' });
+    const id = String(req.params.id);
+    const existed = tournaments.delete(id);
+    if (!existed) return res.status(404).json({ error: 'No encontrado' });
 
-await deleteTournamentFromDb(id);
-return res.json({ ok: true });
-} catch (e) {
+    await deleteTournamentFromDb(id);
+
+    return res.json({ ok: true });
+  } catch (e) {
     console.error('[DB tournaments] delete error', e);
     return res.status(500).json({ error: 'No se pudo borrar el torneo en DB' });
   }
 });
-});
-
 // =========================================================
 // Endpoints Partidos (REST)
 // =========================================================

@@ -97,21 +97,9 @@ ensureDir(UPLOADS_DIR);
 const PLAYER_UPLOADS_DIR = path.join(__dirname, 'public', 'uploads', 'players');
 ensureDir(PLAYER_UPLOADS_DIR);
 
-const playerPhotoStorage = multer.diskStorage({
-  destination: function (req, _file, cb) {
-    const playerId = req.params.id;
-    const dest = path.join(PLAYER_UPLOADS_DIR, playerId);
-    ensureDir(dest);
-    cb(null, dest);
-  },
-  filename: function (_req, file, cb) {
-    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-    cb(null, `${Date.now()}${ext}`);
-  },
-});
-
+// Fotos de jugadores: guardar en memoria (luego BYTEA en Postgres)
 const uploadPlayerPhoto = multer({
-  storage: playerPhotoStorage,
+  storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
     if (file.mimetype?.startsWith('image/')) cb(null, true);
     else cb(new Error('Solo se permiten imágenes'));
@@ -1324,6 +1312,37 @@ app.delete('/api/superadmin/users/:id', authRequired, requireSuperAdmin, async (
   }
 });
 
+// =========================================================
+// Player Photos (Postgres BYTEA)
+// =========================================================
+async function upsertPlayerPhotoToDb(playerId, file) {
+  if (!dbEnabled()) return;
+  const now = Date.now();
+  const contentType = file.mimetype || 'application/octet-stream';
+  const bytes = file.buffer; // Buffer
+
+  await db.query(
+    `INSERT INTO public.player_photos (player_id, content_type, bytes, updated_at)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (player_id) DO UPDATE SET
+       content_type = EXCLUDED.content_type,
+       bytes = EXCLUDED.bytes,
+       updated_at = EXCLUDED.updated_at`,
+    [playerId, contentType, bytes, now]
+  );
+}
+
+async function getPlayerPhotoFromDb(playerId) {
+  if (!dbEnabled()) return null;
+  const { rows } = await db.query(
+    `SELECT content_type, bytes
+     FROM public.player_photos
+     WHERE player_id = $1
+     LIMIT 1`,
+    [playerId]
+  );
+  return rows[0] ?? null;
+}
 
 // =========================================================
 // Players (REST)
@@ -1545,30 +1564,52 @@ app.post(
   async (req, res) => {
     if (!requireDB(res)) return;
     try {
-      const id = String(req.params.id);
-      if (!req.file) return res.status(400).json({ error: 'Falta archivo' });
+  const id = String(req.params.id);
+  if (!req.file) return res.status(400).json({ error: 'Falta archivo' });
 
-      const publicUrl = `/uploads/players/${id}/${path.basename(req.file.path)}`;
-      const now = Date.now();
+  // 1) Guardar BYTEA en Postgres
+  await upsertPlayerPhotoToDb(id, req.file);
 
-      await db.query(
-        `UPDATE public.players SET photo_url=$1, updated_at=$2 WHERE id=$3`,
-        [publicUrl, now, id]
-      );
+  // 2) Guardar URL estable en players.photo_url
+  const publicUrl = `/api/players/${id}/photo`;
+  const now = Date.now();
 
-      return res.json({ ok: true, photo_url: publicUrl });
-    } catch (e) {
-      console.error('[players photo] error', e);
-      return res.status(500).json({ error: 'Error del servidor' });
-    }
-  }
-);
+  await db.query(
+    `UPDATE public.players
+     SET photo_url=$1, updated_at=$2
+     WHERE id=$3`,
+    [publicUrl, now, id]
+  );
+
+  return res.json({ ok: true, photo_url: publicUrl });
+} catch (e) {
+  console.error('[players photo] error', e);
+  return res.status(500).json({ error: 'Error del servidor' });
+}
 
 
 // (Opcional) categorías por API
 app.get('/api/meta/player-categories', (_req, res) => {
   return res.json({ categories: PLAYER_CATEGORIES });
 });
+
+// GET /api/players/:id/photo  -> devuelve imagen desde Postgres (BYTEA)
+app.get('/api/players/:id/photo', async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const id = String(req.params.id);
+    const row = await getPlayerPhotoFromDb(id);
+    if (!row) return res.status(404).send('Not found');
+
+    res.setHeader('Content-Type', row.content_type);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 día
+    return res.send(row.bytes);
+  } catch (e) {
+    console.error('[players photo get] error', e);
+    return res.status(500).send('Server error');
+  }
+});
+
 // =========================================================
 // Startup: cargar DB -> memoria, luego listen
 // =========================================================

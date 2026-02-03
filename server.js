@@ -1579,11 +1579,14 @@ app.post(
     [publicUrl, now, id]
   );
 
-  return res.json({ ok: true, photo_url: publicUrl });
+ return res.json({ ok: true, photo_url: publicUrl });
 } catch (e) {
   console.error('[players photo] error', e);
   return res.status(500).json({ error: 'Error del servidor' });
 }
+  }
+);
+
 
 
 // (Opcional) categorías por API

@@ -169,7 +169,7 @@ const upload = multer({
 // Estado en memoria (torneos)
 // =========================================================
 /** @type {Map<string, any>} */ const tournaments = new Map(); // id -> torneo
-``
+
 
 // =========================================================
 // Persistencia de Partidos en Postgres (public.matches)
@@ -292,11 +292,10 @@ function normalizeTournamentPayload(body = {}) {
   const format = String(body.format ?? 'league').trim();
   const pairs = Number.isFinite(Number(body.pairs)) ? Number(body.pairs) : 8;
   const status = String(body.status ?? 'draft').trim();
-  const date = String(body.date ?? '').trim() || null; // yyyy-mm-dd
+  const date = String(body.date ?? '').trim() || null;
 
   return { name, category, format, pairs, status, date };
 }
-``
 
 function newSet() {
   return { gamesA: 0, gamesB: 0, tieBreak: { active: false, pointsA: 0, pointsB: 0 } };
@@ -1503,7 +1502,7 @@ app.post(
     }
   }
 );
-``
+
 
 // (Opcional) categorías por API
 app.get('/api/meta/player-categories', (_req, res) => {

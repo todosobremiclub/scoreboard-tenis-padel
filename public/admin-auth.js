@@ -66,6 +66,7 @@
     showAdminApp(true);
     setMeLabel(user);
     setMsg('');
+    window.dispatchEvent(new CustomEvent('admin:ready', { detail: { user } }));
     return user;
   }
 

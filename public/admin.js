@@ -149,6 +149,109 @@ async function apiDelete(url){
 }
 
 /* ==============================
+ Club Switcher (multi-club)
+============================== */
+async function fetchAuthClubsCtx() {
+  return apiGet('/api/auth/clubs');
+}
+
+async function selectClub(clubId) {
+  const r = await fetch('/api/auth/select-club', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ clubId })
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || `select-club ${r.status}`);
+  return data;
+}
+
+function renderClubSwitcher(ctx) {
+  const wrap = document.getElementById('clubSwitcher');
+  const sel = document.getElementById('clubSelect');
+  const btn = document.getElementById('clubApplyBtn');
+  const label = document.getElementById('clubActiveLabel');
+  if (!wrap || !sel || !btn || !label) return;
+
+  const clubs = ctx?.clubs ?? [];
+  const activeClubId = ctx?.activeClubId ?? null;
+  const isImpersonating = !!ctx?.isImpersonating;
+  const role = ctx?.role ?? '';
+
+  if (!clubs.length) {
+    wrap.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display = 'block';
+
+  // options
+  sel.innerHTML = '';
+  for (const c of clubs) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.slug ? `${c.name} (${c.slug})` : c.name;
+    if (String(c.id) === String(activeClubId)) opt.selected = true;
+    sel.appendChild(opt);
+  }
+
+  const activeName = clubs.find(c => String(c.id) === String(activeClubId))?.name ?? '—';
+  label.textContent = isImpersonating ? `Activo: ${activeName} (impersonando)` : `Activo: ${activeName}`;
+
+  // Superadmin no usa select-club (usa impersonación)
+  if (role === 'superadmin') {
+    btn.disabled = true;
+    btn.title = 'Superadmin no selecciona club activo: usa impersonación';
+  } else {
+    btn.disabled = false;
+    btn.title = '';
+  }
+
+  if (!btn.dataset.bound) {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async () => {
+      const clubId = sel.value;
+      if (!clubId) return;
+
+      const prevTxt = btn.textContent;
+      btn.textContent = 'Cambiando...';
+      btn.disabled = true;
+
+      try {
+        await selectClub(clubId);
+
+        // Releer ctx para refrescar label/estado
+        const nextCtx = await fetchAuthClubsCtx();
+        renderClubSwitcher(nextCtx);
+
+        // Refrescar datos
+        await refreshLists();
+        // Solo si existen (según pestaña/uso)
+        try { await loadPlayers(); } catch {}
+        try { await loadTournaments(); } catch {}
+      } catch (e) {
+        console.error(e);
+        alert(e?.message || 'No se pudo cambiar el club');
+      } finally {
+        btn.textContent = prevTxt;
+        // re-habilitar si no es superadmin
+        if ((ctx?.role ?? '') !== 'superadmin') btn.disabled = false;
+      }
+    });
+  }
+}
+
+async function initClubSwitcher() {
+  try {
+    const ctx = await fetchAuthClubsCtx();
+    renderClubSwitcher(ctx);
+  } catch (e) {
+    console.warn('[clubSwitcher] no se pudo iniciar:', e?.message || e);
+  }
+}
+
+/* ==============================
  Socket.IO (un solo socket; múltiples salas)
 ============================== */
 function ensureSocket(){

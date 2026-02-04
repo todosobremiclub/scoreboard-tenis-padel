@@ -126,6 +126,23 @@
     <div class="container">
       <h1>Consola de Administración</h1>
 
+<!-- Club Switcher -->
+<div id="clubSwitcher" style="display:none; padding:10px; border:1px solid #ddd; border-radius:8px; margin:10px 0;">
+  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    <strong>Club:</strong>
+
+    <select id="clubSelect" style="min-width:240px; padding:6px;">
+      <!-- options por JS -->
+    </select>
+
+    <button id="clubApplyBtn" type="button" style="padding:6px 10px;">
+      Cambiar
+    </button>
+
+    <span id="clubActiveLabel" style="opacity:.8;"></span>
+  </div>
+</div>
+
       <!-- Top Tabs: Jugadores / Torneos / Partidos -->
       <div class="top-tabs" id="topTabs">
         <div class="top-tab" data-top="players">Jugadores</div>

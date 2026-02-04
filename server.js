@@ -287,7 +287,18 @@ async function upsertTournamentToDb(tournament) {
   if (!name) throw new Error('Tournament.name vacío: no se puede persistir');
 
   // en tu UI usás "format"; en tabla existe "type"
-  const type = 't'; // o el valor permitido que viste en la constraint
+  // La DB exige: type IN ('league_3sets','americano')
+const allowedTypes = new Set(['league_3sets', 'americano']);
+
+// 1) Si ya vino un type válido, lo respetamos
+let type = String(tournament.type ?? '').trim();
+
+// 2) Si no es válido, lo derivamos del format del front
+if (!allowedTypes.has(type)) {
+  const fmt = String(tournament.format ?? '').trim(); // 'league' | 'groups' | 'knockout'
+  if (fmt === 'league' || fmt === 'knockout') type = 'league_3sets';
+  else type = 'americano'; // groups u otros
+}
 
   const active = (typeof tournament.active === 'boolean') ? tournament.active : true;
 
@@ -324,29 +335,23 @@ async function loadTournamentsFromDb() {
   FROM public.tournaments
 `);
 
-    tournaments.clear();
+   for (const r of rows) {
+  let t = r.data ?? {};
+  if (typeof t === 'string') {
+    try { t = JSON.parse(t); } catch { t = {}; }
+  }
 
-    for (const r of rows) {
-      let t = r.data ?? {};
-if (typeof t === 'string') {
-  try { t = JSON.parse(t); } catch { t = {}; }
+  // preferimos las columnas reales de la tabla
+  t.id = r.id;
+  t.name = r.name ?? t.name;
+  t.type = r.type ?? t.type;
+  t.active = (typeof r.active === 'boolean') ? r.active : (t.active ?? true);
+
+  t.created_at = Number(r.created_at ?? Date.now());
+  t.updated_at = Number(r.updated_at ?? Date.now());
+
+  tournaments.set(t.id, t);
 }
-
-// preferimos las columnas reales de la tabla
-t.id = r.id;
-t.name = r.name ?? t.name;
-t.type = r.type ?? t.type;
-t.active = (typeof r.active === 'boolean') ? r.active : (t.active ?? true);
-
-t.created_at = Number(r.created_at ?? Date.now());
-t.updated_at = Number(r.updated_at ?? Date.now());
-
-tournaments.set(t.id, t);
-
-t.name = r.name ?? t.name;
-t.type = r.type ?? t.type;
-t.active = (typeof r.active === 'boolean') ? r.active : (t.active ?? true);
-    }
 
     console.log(`[DB tournaments] Cargados: ${tournaments.size}`);
   } catch (e) {

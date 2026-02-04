@@ -73,6 +73,46 @@ function dbEnabled() {
   return !!db;
 }
 
+// =========================================================
+// Multi-Club: helpers (clubs del usuario + impersonación)
+// =========================================================
+async function listUserClubs(userId) {
+  // Devuelve clubes activos asignados al usuario (user_clubs.active = true)
+  const { rows } = await db.query(
+    `
+    SELECT
+      c.id,
+      c.name,
+      c.slug,
+      uc.role,
+      uc.active
+    FROM public.user_clubs uc
+    JOIN public.clubs c ON c.id = uc.club_id
+    WHERE uc.user_id = $1
+      AND uc.active = true
+      AND c.active = true
+    ORDER BY c.name ASC
+    `,
+    [userId]
+  );
+  return rows;
+}
+
+async function getActiveImpersonation(tokenHash) {
+  // Si el superadmin está impersonando, devolvemos el club_id
+  const { rows } = await db.query(
+    `
+    SELECT club_id
+    FROM public.impersonation_sessions
+    WHERE token_hash = $1
+      AND ended_at IS NULL
+    LIMIT 1
+    `,
+    [tokenHash]
+  );
+  return rows[0]?.club_id ?? null;
+}
+
 app.get('/api/meta/dbinfo', async (_req, res) => {
   if (!requireDB(res)) return;
   try {
@@ -1105,37 +1145,75 @@ async function readSession(req) {
   if (!rawToken) return null;
 
   const tokenHash = sha256Hex(rawToken);
+
+  // Traer sesión (incluye active_club_id)
   const { rows } = await db.query(
-    'SELECT token_hash, user_id, created_at, last_seen_at, expires_at FROM user_sessions WHERE token_hash=$1 LIMIT 1',
+    `SELECT token_hash, user_id, created_at, last_seen_at, expires_at, active_club_id
+     FROM public.user_sessions
+     WHERE token_hash = $1
+     LIMIT 1`,
     [tokenHash]
   );
 
   const session = rows[0];
   if (!session) return null;
 
+  // Expirada
   if (session.expires_at <= nowMs()) {
-    await db.query('DELETE FROM user_sessions WHERE token_hash=$1', [tokenHash]);
+    await db.query('DELETE FROM public.user_sessions WHERE token_hash=$1', [tokenHash]);
     return null;
   }
 
+  // Usuario
   const user = await getUserPublicById(session.user_id);
   if (!user || user.active === false) {
-    await db.query('DELETE FROM user_sessions WHERE token_hash=$1', [tokenHash]);
+    await db.query('DELETE FROM public.user_sessions WHERE token_hash=$1', [tokenHash]);
     return null;
   }
 
-  await db.query('UPDATE user_sessions SET last_seen_at=$1 WHERE token_hash=$2', [nowMs(), tokenHash]);
-  return { session, user, tokenHash };
-}
+  // === Multi-club: clubes asignados al usuario
+  const clubs = await listUserClubs(user.id);
 
-async function authOptional(req, _res, next) {
+  // === Club activo (prioridad: impersonación > active_club_id de sesión > primer club)
+  let clubId = null;
+  let isImpersonating = false;
+
+  // 1) Impersonación (solo superadmin)
+  if (user.role === 'superadmin') {
+    const impClub = await getActiveImpersonation(tokenHash);
+    if (impClub) {
+      clubId = impClub;
+      isImpersonating = true;
+    }
+  }
+
+  // 2) active_club_id guardado en la sesión (si no impersona)
+  if (!clubId) {
+    const sessionClubId = session.active_club_id ?? null;
+    if (sessionClubId) {
+      const hasClub = clubs.some(c => c.id === sessionClubId);
+      if (hasClub) clubId = sessionClubId;
+    }
+  }
+
+  // 3) fallback: primer club
+  if (!clubId) clubId = clubs[0]?.id ?? null;
+
+  return { session, user, tokenHash, clubs, clubId, isImpersonating };
+}  
+
+ async function authOptional(req, _res, next) {
   try {
     if (!hasDB) return next();
     const ctx = await readSession(req);
-    if (ctx) {
-      req.user = ctx.user;
-      req.sessionHash = ctx.tokenHash;
-    }
+if (ctx) {
+  req.user = ctx.user;
+  req.sessionHash = ctx.tokenHash;
+
+  req.userClubs = ctx.clubs ?? [];
+  req.clubId = ctx.clubId ?? null;
+  req.isImpersonating = !!ctx.isImpersonating;
+}
   } catch {}
   next();
 }
@@ -1146,8 +1224,13 @@ async function authRequired(req, res, next) {
     const ctx = await readSession(req);
     if (!ctx) return res.status(401).json({ error: 'No autenticado' });
     req.user = ctx.user;
-    req.sessionHash = ctx.tokenHash;
-    next();
+req.sessionHash = ctx.tokenHash;
+
+req.userClubs = ctx.clubs ?? [];
+req.clubId = ctx.clubId ?? null;
+req.isImpersonating = !!ctx.isImpersonating;
+
+next();
   } catch {
     return res.status(401).json({ error: 'No autenticado' });
   }
@@ -1398,6 +1481,21 @@ function requireAdminOrStaff(req, res, next) {
   const role = req.user?.role;
   if (!role || !['admin', 'staff', 'superadmin'].includes(role)) {
     return res.status(403).json({ error: 'No autorizado' });
+  }
+  next();
+}
+
+function requireClubContext(req, res, next) {
+  const role = req.user?.role;
+
+  // Superadmin puede operar sin club, o con club si impersona
+  if (role === 'superadmin') return next();
+
+  // Admin/Staff deben tener clubId válido
+  if (!req.clubId) {
+    return res.status(400).json({
+      error: 'Este usuario no tiene club activo asignado. Contacte al superadmin.'
+    });
   }
   next();
 }

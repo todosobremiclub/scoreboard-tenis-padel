@@ -227,15 +227,17 @@ async function upsertMatchToDb(match) {
   const payload = serializeMatch(match);
 
   await db.query(
-    `INSERT INTO public.matches (id, status, created_at, updated_at, ended_at, data)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+    `INSERT INTO public.matches (id, club_id, status, created_at, updated_at, ended_at, data)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
      ON CONFLICT (id) DO UPDATE SET
-       status     = EXCLUDED.status,
+       club_id = EXCLUDED.club_id,
+       status = EXCLUDED.status,
        updated_at = EXCLUDED.updated_at,
-       ended_at   = EXCLUDED.ended_at,
-       data       = EXCLUDED.data`,
+       ended_at = EXCLUDED.ended_at,
+       data = EXCLUDED.data`,
     [
       match.id,
+      match.club_id,
       match.status || 'scheduled',
       match.createdAt ?? Date.now(),
       match.updatedAt ?? Date.now(),
@@ -243,7 +245,7 @@ async function upsertMatchToDb(match) {
       JSON.stringify(payload),
     ]
   );
-}
+} 
 
 /** Guardado debounced */
 function scheduleSaveMatch(match) {
@@ -275,10 +277,10 @@ async function loadMatchesFromDb() {
   if (!dbEnabled()) return;
 
   try {
-    const { rows } = await db.query(
-      `SELECT id, status, created_at, updated_at, ended_at, data
-       FROM public.matches`
-    );
+    const { rows } = await db.query(`
+  SELECT club_id, id, status, created_at, updated_at, ended_at, data
+  FROM public.matches
+`);
 
     matches.clear();
     matchesHistory.clear();
@@ -293,6 +295,7 @@ async function loadMatchesFromDb() {
 
       // aseguramos campos core
       m.id = r.id;
+      m.club_id = r.club_id ?? m.club_id;
       m.status = r.status;
       m.createdAt = Number(r.created_at ?? Date.now());
       m.updatedAt = Number(r.updated_at ?? Date.now());
@@ -342,25 +345,30 @@ if (!allowedTypes.has(type)) {
 
   const active = (typeof tournament.active === 'boolean') ? tournament.active : true;
 
+const clubId = String(tournament.club_id ?? tournament.clubId ?? '').trim();
+if (!clubId) throw new Error('Tournament.club_id faltante: no se puede persistir');
+
   await db.query(
-    `INSERT INTO public.tournaments (id, name, type, active, created_at, updated_at, data)
-     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)
-     ON CONFLICT (id) DO UPDATE SET
-       name = EXCLUDED.name,
-       type = EXCLUDED.type,
-       active = EXCLUDED.active,
-       updated_at = EXCLUDED.updated_at,
-       data = EXCLUDED.data`,
-    [
-      tournament.id,
-      name,
-      type,
-      active,
-      createdAt,
-      updatedAt,
-      JSON.stringify(tournament),
-    ]
-  );
+  `INSERT INTO public.tournaments (id, club_id, name, type, active, created_at, updated_at, data)
+   VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+   ON CONFLICT (id) DO UPDATE SET
+     club_id = EXCLUDED.club_id,
+     name = EXCLUDED.name,
+     type = EXCLUDED.type,
+     active = EXCLUDED.active,
+     updated_at = EXCLUDED.updated_at,
+     data = EXCLUDED.data`,
+  [
+    tournament.id,
+    clubId,
+    name,
+    type,
+    active,
+    createdAt,
+    updatedAt,
+    JSON.stringify(tournament),
+  ]
+);
 }
   async function deleteTournamentFromDb(id) {
   if (!dbEnabled()) return;
@@ -371,8 +379,8 @@ async function loadTournamentsFromDb() {
   if (!dbEnabled()) return;
   try {
     const { rows } = await db.query(`
-  SELECT id, name, type, active, created_at, updated_at, data
-  FROM public.tournaments
+  SELECT club_id, id, name, type, active, created_at, updated_at, data
+FROM public.tournaments
 `);
 
    for (const r of rows) {
@@ -391,6 +399,7 @@ async function loadTournamentsFromDb() {
   t.updated_at = Number(r.updated_at ?? Date.now());
 
   tournaments.set(t.id, t);
+  t.club_id = r.club_id ?? t.club_id;
 }
 
     console.log(`[DB tournaments] Cargados: ${tournaments.size}`);
@@ -692,8 +701,7 @@ app.get('/api/meta/stages', (_req, res) => res.json({ stages: MATCH_STAGES }));
 // =========================================================
 
 // GET /api/tournaments?q=&category=&status=&limit=&offset=&sort=-created_at
-app.get('/api/tournaments', (req, res) => {
-  const q = String(req.query.q ?? '').trim().toLowerCase();
+app.get('/api/tournaments', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {  const q = String(req.query.q ?? '').trim().toLowerCase();
   const category = String(req.query.category ?? '').trim().toUpperCase();
   const status = String(req.query.status ?? '').trim();
   const sort = String(req.query.sort ?? '-created_at');
@@ -701,7 +709,7 @@ app.get('/api/tournaments', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit ?? '50', 10), 200);
   const offset = Math.max(parseInt(req.query.offset ?? '0', 10), 0);
 
-  let list = Array.from(tournaments.values());
+let list = Array.from(tournaments.values()).filter(t => String(t.club_id ?? '') === String(req.clubId));
 
   if (q) list = list.filter(t => String(t.name ?? '').toLowerCase().includes(q));
   if (category) list = list.filter(t => String(t.category ?? '').toUpperCase() === category);
@@ -721,7 +729,7 @@ app.get('/api/tournaments', (req, res) => {
 });
 
 // POST /api/tournaments
-app.post('/api/tournaments', async (req, res) => {
+app.post('/api/tournaments', authRequired, requireAdminOrStaff, requireClubContext, async (req, res) => {
   if (!requireDB(res)) return;
   try {
     const payload = normalizeTournamentPayload(req.body ?? {});
@@ -730,7 +738,7 @@ app.post('/api/tournaments', async (req, res) => {
     const now = Date.now();
     const id = generateTournamentId();
 
-    const t = { id, ...payload, created_at: now, updated_at: now };
+    const t = { id, club_id: req.clubId, ...payload, created_at: now, updated_at: now };
 
     tournaments.set(id, t);
     await upsertTournamentToDb(t);
@@ -743,17 +751,26 @@ app.post('/api/tournaments', async (req, res) => {
 });
 
 // PATCH /api/tournaments/:id
-app.patch('/api/tournaments/:id', async (req, res) => {
+app.patch('/api/tournaments/:id', authRequired, requireAdminOrStaff, requireClubContext, async (req, res) => {
   if (!requireDB(res)) return;
   try {
     const id = String(req.params.id);
     const existing = tournaments.get(id);
-    if (!existing) return res.status(404).json({ error: 'No encontrado' });
+
+    // Debe existir y pertenecer al club activo
+    if (!existing || String(existing.club_id ?? '') !== String(req.clubId)) {
+      return res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+    }
 
     const payload = normalizeTournamentPayload({ ...existing, ...req.body });
     if (!payload.name) return res.status(400).json({ error: 'Nombre requerido' });
 
-    const updated = { ...existing, ...payload, updated_at: Date.now() };
+    const updated = {
+      ...existing,
+      ...payload,
+      club_id: existing.club_id,      // no permitir cambiar de club
+      updated_at: Date.now(),
+    };
 
     tournaments.set(id, updated);
     await upsertTournamentToDb(updated);
@@ -765,9 +782,9 @@ app.patch('/api/tournaments/:id', async (req, res) => {
   }
 });
 
+
 // DELETE /api/tournaments/:id
-app.delete('/api/tournaments/:id', async (req, res) => {
-  if (!requireDB(res)) return;
+app.delete('/api/tournaments/:id', authRequired, requireAdminOrStaff, requireClubContext, async (req, res) => {  if (!requireDB(res)) return;
   try {
     const id = String(req.params.id);
     const existed = tournaments.delete(id);
@@ -784,7 +801,7 @@ app.delete('/api/tournaments/:id', async (req, res) => {
 // =========================================================
 // Endpoints Partidos (REST)
 // =========================================================
-app.post('/api/matches', (req, res) => {
+app.post('/api/matches', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
   const { name, teamA, teamB, rules, firstServer, stage, courtName } = req.body ?? {};
   const firstServerIndex = firstServer === 'B' ? 1 : 0;
 
@@ -798,10 +815,15 @@ app.post('/api/matches', (req, res) => {
     courtName: courtName ?? '',
   });
 
-  res.json({ id: match.id });
-});
+  // ✅ Club del match (PUBLICA para ver, PRIVADA para administrar)
+  match.club_id = req.clubId;
 
-app.get('/api/matches', (req, res) => {
+  // (opcional pero recomendado) persistir ya con club_id
+  upsertMatchToDb(match).catch(e => console.error('[DB matches] create upsert error', e));
+
+  return res.json({ id: match.id });
+});
+app.get('/api/matches', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
   const { status = 'active', stage, q = '', sort = '-createdAt' } = req.query;
 
   const norm = (s) => (s ?? '').toString().toLowerCase();
@@ -810,8 +832,8 @@ app.get('/api/matches', (req, res) => {
   const filterByStage = stage && MATCH_STAGES.includes(stage) ? stage : null;
   const mapToArray = (m) => Array.from(m.values());
 
-  let active = mapToArray(matches);
-  let finished = mapToArray(matchesHistory);
+  let active = mapToArray(matches).filter(m => String(m.club_id ?? '') === String(req.clubId));
+let finished = mapToArray(matchesHistory).filter(m => String(m.club_id ?? '') === String(req.clubId));
 
   if (filterByStage) {
     active = active.filter((m) => m.stage === filterByStage);
@@ -858,10 +880,14 @@ app.get('/api/matches/:id', (req, res) => {
   res.json(formatState(match));
 });
 
-app.patch('/api/matches/:id', (req, res) => {
+app.patch('/api/matches/:id', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
   const { id } = req.params;
   const match = matches.get(id);
   if (!match) return res.status(404).json({ error: 'No encontrado o ya finalizado' });
+
+  if (String(match.club_id ?? '') !== String(req.clubId)) {
+    return res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+  }
 
   const { name, teamA, teamB, stage, courtName } = req.body ?? {};
 
@@ -870,16 +896,29 @@ app.patch('/api/matches/:id', (req, res) => {
   if (typeof teamB === 'string' && teamB.trim()) match.teams[1].name = teamB.trim();
   if (typeof stage === 'string' && MATCH_STAGES.includes(stage)) match.stage = stage;
   if (typeof courtName === 'string') match.courtName = courtName.trim();
-
   touchUpdated(match);
-
   io.to(match.id).emit('state', formatState(match));
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
-app.post('/api/matches/:id/start', (req, res) => {
-  const match = matches.get(req.params.id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+function getActiveMatchForAdmin(req, res) {
+  const id = String(req.params.id);
+  const match = matches.get(id); // solo activos (los que se pueden controlar)
+  if (!match) {
+    res.status(404).json({ error: 'No encontrado o ya finalizado' });
+    return null;
+  }
+  if (String(match.club_id ?? '') !== String(req.clubId)) {
+    res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+    return null;
+  }
+  return match;
+}
+
+  
+app.post('/api/matches/:id/start', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
+  const match = getActiveMatchForAdmin(req, res);
+  if (!match) return;
 
   if (!match.running) {
     match.running = true;
@@ -891,11 +930,27 @@ app.post('/api/matches/:id/start', (req, res) => {
 
   io.to(match.id).emit('state', formatState(match));
   res.json({ ok: true });
+
+function getActiveMatchForAdmin(req, res) {
+  const id = String(req.params.id);
+  const match = matches.get(id); // solo activos
+  if (!match) {
+    res.status(404).json({ error: 'No encontrado o ya finalizado' });
+    return null;
+  }
+  if (String(match.club_id ?? '') !== String(req.clubId)) {
+    res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+    return null;
+  }
+  return match;
+}
 });
 
-app.post('/api/matches/:id/pause', (req, res) => {
-  const match = matches.get(req.params.id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+
+
+app.post('/api/matches/:id/pause', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
+  const match = getActiveMatchForAdmin(req, res);
+  if (!match) return;
 
   if (match.running) {
     match.running = false;
@@ -910,9 +965,10 @@ app.post('/api/matches/:id/pause', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/matches/:id/resume', (req, res) => {
-  const match = matches.get(req.params.id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+
+app.post('/api/matches/:id/resume', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
+  const match = getActiveMatchForAdmin(req, res);
+  if (!match) return;
 
   if (!match.running) {
     match.running = true;
@@ -926,17 +982,19 @@ app.post('/api/matches/:id/resume', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/matches/:id/finish', (req, res) => {
-  const match = matches.get(req.params.id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o ya finalizado' });
+
+app.post('/api/matches/:id/finish', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
+  const match = getActiveMatchForAdmin(req, res);
+  if (!match) return;
 
   moveToHistory(match);
   res.json({ ok: true });
 });
 
-app.post('/api/matches/:id/point/:side', (req, res) => {
-  const match = matches.get(req.params.id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+
+app.post('/api/matches/:id/point/:side', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
+  const match = getActiveMatchForAdmin(req, res);
+  if (!match) return;
 
   const { side } = req.params;
   if (side !== 'A' && side !== 'B') return res.status(400).json({ error: 'Side inválido' });
@@ -947,29 +1005,27 @@ app.post('/api/matches/:id/point/:side', (req, res) => {
     touchUpdated(match);
     io.to(match.id).emit('state', formatState(match));
   }
-
   res.json({ ok: true });
 });
 
-app.post('/api/matches/:id/reset-game', (req, res) => {
-  const match = matches.get(req.params.id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+app.post('/api/matches/:id/reset-game', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
+  const match = getActiveMatchForAdmin(req, res);
+  if (!match) return;
 
   match.currentGame = { pointsA: 0, pointsB: 0, advantage: null };
   touchUpdated(match);
   io.to(match.id).emit('state', formatState(match));
-
   res.json({ ok: true });
 });
 
-app.post('/api/matches/:id/toggle-server', (req, res) => {
-  const match = matches.get(req.params.id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+
+app.post('/api/matches/:id/toggle-server', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
+  const match = getActiveMatchForAdmin(req, res);
+  if (!match) return;
 
   match.serverIndex = match.serverIndex === 0 ? 1 : 0;
   touchUpdated(match);
   io.to(match.id).emit('state', formatState(match));
-
   res.json({ ok: true });
 });
 
@@ -977,39 +1033,32 @@ app.post('/api/matches/:id/toggle-server', (req, res) => {
 // Hard delete partido (DB + memoria + opcional uploads)
 // DELETE /api/matches/:id?deleteAds=1
 // =========================================================
-app.delete('/api/matches/:id', async (req, res) => {
+app.delete('/api/matches/:id', authRequired, requireAdminOrStaff, requireClubContext, async (req, res) => {
   try {
     const { id } = req.params;
+
+    const match = matches.get(id) ?? matchesHistory.get(id);
+if (!match || String(match.club_id ?? '') !== String(req.clubId)) {
+  return res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+}
+
     const deleteAds = String(req.query.deleteAds ?? '1') === '1';
 
     const inActive = matches.has(id);
     const inHistory = matchesHistory.has(id);
-
-    // borrar en memoria si está
     if (inActive) matches.delete(id);
     if (inHistory) matchesHistory.delete(id);
 
-    // borrar en DB siempre que haya DB (hard delete)
-    if (dbEnabled()) {
-      await deleteMatchFromDb(id);
-    } else if (!inActive && !inHistory) {
-      return res.status(404).json({ error: 'No encontrado' });
-    }
+    if (dbEnabled()) await deleteMatchFromDb(id);
 
-    // borrar uploads/ads del partido
     if (deleteAds) {
       const dir = path.join(UPLOADS_DIR, id);
-      try {
-        if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-      } catch (e) {
-        console.warn('[matches delete] no se pudo borrar uploads:', e?.message || e);
-      }
+      try { if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true }); } catch {}
     }
 
     io.to(id).emit('deleted', { id });
 
-   
-return res.json({
+    return res.json({
       ok: true,
       deleted: { active: inActive, history: inHistory },
       deleteAds,
@@ -1019,8 +1068,7 @@ return res.json({
     console.error('[matches delete] error', e);
     return res.status(500).json({ error: 'Error del servidor' });
   }
-});
-  
+});  
 
 
 // =========================================================
@@ -1033,10 +1081,17 @@ app.get('/api/matches/:id/ads', (req, res) => {
   res.json({ urls: match.ads ?? [] });
 });
 
-app.post('/api/matches/:id/ads', upload.array('files', 20), (req, res) => {
-  const { id } = req.params;
-  const match = matches.get(id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+
+app.post('/api/matches/:id/ads',
+  authRequired, requireAdminOrStaff, requireClubContext,
+  upload.array('files', 20),
+  (req, res) => {
+    const match = matches.get(req.params.id);
+    if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+    if (String(match.club_id ?? '') !== String(req.clubId)) {
+      return res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+    }
+
 
   const files = req.files ?? [];
   const urls = files.map((f) => publicUrlForFile(match.id, path.basename(f.path)));
@@ -1048,25 +1103,24 @@ app.post('/api/matches/:id/ads', upload.array('files', 20), (req, res) => {
   res.json({ urls: match.ads });
 });
 
-app.delete('/api/matches/:id/ads', (req, res) => {
-  const { id } = req.params;
-  const match = matches.get(id);
-  if (!match) return res.status(404).json({ error: 'No encontrado o finalizado' });
+app.delete('/api/matches/:id/ads', authRequired, requireAdminOrStaff, requireClubContext, (req, res) => {
+  const match = getActiveMatchForAdmin(req, res);
+  if (!match) return;
 
   const { url } = req.query;
-  const filename = safeFilenameFromUrl(id, String(url ?? ''));
+  const filename = safeFilenameFromUrl(match.id, String(url ?? ''));
   if (!filename) return res.status(400).json({ error: 'URL inválida' });
 
-  const absPath = path.join(UPLOADS_DIR, id, filename);
-  try {
-    if (fs.existsSync(absPath)) fs.unlinkSync(absPath);
-  } catch {}
+  const absPath = path.join(UPLOADS_DIR, match.id, filename);
+  try { if (fs.existsSync(absPath)) fs.unlinkSync(absPath); } catch {}
+
 
   match.ads = (match.ads ?? []).filter((u) => u !== url);
   touchUpdated(match);
-
   io.to(match.id).emit('state', formatState(match));
   res.json({ urls: match.ads });
+
+
 });
 
 // =========================================================
@@ -1306,6 +1360,52 @@ app.get('/api/auth/me', authRequired, async (req, res) => {
 });
 
 // =========================================================
+// Auth: clubes disponibles + club activo
+// =========================================================
+app.get('/api/auth/clubs', authRequired, (req, res) => {
+  return res.json({
+    role: req.user?.role,
+    activeClubId: req.clubId ?? null,
+    isImpersonating: !!req.isImpersonating,
+    clubs: req.userClubs ?? [],
+  });
+});
+
+// Setea el club activo para la sesión (solo admin/staff; superadmin usa impersonación)
+app.post('/api/auth/select-club', authRequired, async (req, res) => {
+  if (!requireDB(res)) return;
+
+  try {
+    const role = req.user?.role;
+
+    // Superadmin: no usa active_club_id (maneja impersonación)
+    if (role === 'superadmin') {
+      return res.status(400).json({ error: 'Superadmin no selecciona club activo: use impersonación.' });
+    }
+
+    const clubId = String(req.body?.clubId ?? '').trim();
+    if (!clubId) return res.status(400).json({ error: 'clubId requerido' });
+
+    // Validar que el usuario tenga ese club asignado
+    const allowed = (req.userClubs ?? []).some(c => c.id === clubId);
+    if (!allowed) return res.status(403).json({ error: 'No autorizado para ese club' });
+
+    // Persistir selección en la sesión actual
+    await db.query(
+      `UPDATE public.user_sessions
+       SET active_club_id = $1, last_seen_at = $2
+       WHERE token_hash = $3`,
+      [clubId, Date.now(), req.sessionHash]
+    );
+
+    return res.json({ ok: true, activeClubId: clubId });
+  } catch (e) {
+    console.error('[auth/select-club] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// =========================================================
 // Super Admin - Gestión de Usuarios (CRUD)
 // =========================================================
 app.get('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, res) => {
@@ -1331,6 +1431,45 @@ app.get('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, re
   } catch (e) {
     console.error('[superadmin list users]', e);
     res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// =========================================================
+// Superadmin: iniciar impersonación de un club
+// =========================================================
+app.post('/api/superadmin/impersonate', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+
+  try {
+    const clubId = String(req.body?.clubId ?? '').trim();
+    if (!clubId) return res.status(400).json({ error: 'clubId requerido' });
+
+    // Validar que el club exista y esté activo
+    const chk = await db.query(
+      `SELECT id FROM public.clubs WHERE id = $1 AND active = true LIMIT 1`,
+      [clubId]
+    );
+    if (!chk.rows[0]) return res.status(404).json({ error: 'Club no encontrado o inactivo' });
+
+    // Cerrar cualquier impersonación previa activa para esta sesión
+    await db.query(
+      `UPDATE public.impersonation_sessions
+       SET ended_at = $2
+       WHERE token_hash = $1 AND ended_at IS NULL`,
+      [req.sessionHash, Date.now()]
+    );
+
+    // Crear nueva impersonación activa
+    await db.query(
+      `INSERT INTO public.impersonation_sessions (token_hash, superadmin_user_id, club_id, created_at, ended_at)
+       VALUES ($1, $2, $3, $4, NULL)`,
+      [req.sessionHash, req.user.id, clubId, Date.now()]
+    );
+
+    return res.json({ ok: true, clubId, isImpersonating: true });
+  } catch (e) {
+    console.error('[superadmin/impersonate] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
   }
 });
 
@@ -1369,6 +1508,27 @@ app.post('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, r
       return res.status(409).json({ error: 'El email ya existe' });
     }
     console.error('[superadmin create user] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// =========================================================
+// Superadmin: finalizar impersonación
+// =========================================================
+app.post('/api/superadmin/impersonate/stop', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+
+  try {
+    const r = await db.query(
+      `UPDATE public.impersonation_sessions
+       SET ended_at = $2
+       WHERE token_hash = $1 AND ended_at IS NULL`,
+      [req.sessionHash, Date.now()]
+    );
+
+    return res.json({ ok: true, stopped: r.rowCount > 0 });
+  } catch (e) {
+    console.error('[superadmin/impersonate/stop] error', e);
     return res.status(500).json({ error: 'Error del servidor' });
   }
 });
@@ -1488,18 +1648,22 @@ function requireAdminOrStaff(req, res, next) {
 function requireClubContext(req, res, next) {
   const role = req.user?.role;
 
-  // Superadmin puede operar sin club, o con club si impersona
-  if (role === 'superadmin') return next();
-
-  // Admin/Staff deben tener clubId válido
+  // Para endpoints "scoped", TODOS necesitan req.clubId:
+  // - admin/staff: por active_club_id de sesión (select-club)
+  // - superadmin: por impersonación
   if (!req.clubId) {
+    if (role === 'superadmin') {
+      return res.status(400).json({
+        error: 'Superadmin: debe impersonar un club para operar en este módulo.'
+      });
+    }
     return res.status(400).json({
-      error: 'Este usuario no tiene club activo asignado. Contacte al superadmin.'
+      error: 'Este usuario no tiene club activo asignado. Seleccione un club o contacte al superadmin.'
     });
   }
+
   next();
 }
-
 // Calcula edad a partir de birthdate (ms epoch)
 function calcAge(birthMs) {
   if (!birthMs) return null;
@@ -1521,7 +1685,7 @@ function calcAge(birthMs) {
  *  - limit (max 200), offset
  *  - sort: '-created_at' | 'last_name' | '-updated_at'
  */
-app.get('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
+app.get('/api/players', authRequired, requireAdminOrStaff, requireClubContext, async (req, res) => {
   if (!requireDB(res)) return;
   try {
     const q = String(req.query.q ?? '').trim().toLowerCase();
@@ -1540,6 +1704,10 @@ app.get('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
 
     const where = [];
     const params = [];
+
+// Scope por club
+params.push(req.clubId);
+where.push(`club_id = $${params.length}`);
 
     if (onlyActive) {
       params.push(true);
@@ -1581,7 +1749,7 @@ FROM public.players
  * POST /api/players
  * body: { first_name, last_name, dni?, phone?, birthdate?(ms), category }
  */
-app.post('/api/players', authRequired, requireAdminOrStaff, async (req, res) => {
+app.post('/api/players', authRequired, requireAdminOrStaff, requireClubContext, async (req, res) => {
   if (!requireDB(res)) return;
   try {
     const { first_name = '', last_name = '', dni = '', phone = '', birthdate = null, category = '' } = req.body ?? {};
@@ -1600,11 +1768,24 @@ app.post('/api/players', authRequired, requireAdminOrStaff, async (req, res) => 
 
     // ✅ SIEMPRE public.players
     const sql = `
-      INSERT INTO public.players (id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9)
-      RETURNING id
-    `;
-    const params = [id, fn, ln, (dni || null), (phone || null), bms, age, (cat || null), now];
+  INSERT INTO public.players
+    (id, club_id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at)
+  VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9,$9)
+  RETURNING id
+`;
+    const params = [
+  id,
+  req.clubId,
+  fn,
+  ln,
+  (dni || null),
+  (phone || null),
+  bms,
+  age,
+  (cat || null),
+  now
+];
 
     const { rows } = await db.query(sql, params);
     return res.status(201).json({ id: rows[0]?.id });
@@ -1618,7 +1799,7 @@ app.post('/api/players', authRequired, requireAdminOrStaff, async (req, res) => 
  * PATCH /api/players/:id
  * body: { first_name?, last_name?, dni?, phone?, birthdate?(ms), category?, active? }
  */
-app.patch('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res) => {
+app.patch('/api/players/:id', authRequired, requireAdminOrStaff, requireClubContext, async (req, res) => {
   if (!requireDB(res)) return;
   try {
     const id = String(req.params.id);
@@ -1660,17 +1841,33 @@ app.patch('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res
     params.push(id);
 
     // ✅ SIEMPRE public.players
-    const updateSql = `UPDATE public.players SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING birthdate`;
+   // Agregamos club_id al WHERE para evitar editar jugadores de otro club
+params.push(req.clubId);
+const updateSql = `UPDATE public.players
+  SET ${fields.join(', ')}
+  WHERE id = $${params.length - 1} AND club_id = $${params.length}
+  RETURNING birthdate`;
     const { rows } = await db.query(updateSql, params);
+
+if (!rows || rows.length === 0) {
+  return res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+}
 
     if (shouldRecalcAge) {
       const newBirth = rows?.[0]?.birthdate ?? null;
       const newAge = newBirth ? calcAge(newBirth) : null;
-      await db.query(`UPDATE public.players SET age=$1, updated_at=$2 WHERE id=$3`, [newAge, Date.now(), id]);
+
+      await db.query(
+        `UPDATE public.players
+         SET age=$1, updated_at=$2
+         WHERE id=$3 AND club_id=$4`,
+        [newAge, Date.now(), id, req.clubId]
+      );
     }
 
     return res.json({ ok: true });
-  } catch (e) {
+
+} catch (e) {
     console.error('[players patch] error', e);
     return res.status(500).json({ error: 'Error del servidor' });
   }
@@ -1680,17 +1877,27 @@ app.patch('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res
  * DELETE /api/players/:id
  * Soft delete => active=false
  */
-app.delete('/api/players/:id', authRequired, requireAdminOrStaff, async (req, res) => {
+app.delete('/api/players/:id', authRequired, requireAdminOrStaff, requireClubContext, async (req, res) => {
   if (!requireDB(res)) return;
   try {
     const id = String(req.params.id);
     // ✅ SIEMPRE public.players
-    await db.query(`UPDATE public.players SET active=false, updated_at=$1 WHERE id=$2`, [Date.now(), id]);
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('[players delete] error', e);
-    return res.status(500).json({ error: 'Error del servidor' });
-  }
+    const r = await db.query(
+  `UPDATE public.players
+   SET active=false, updated_at=$1
+   WHERE id=$2 AND club_id=$3`,
+  [Date.now(), id, req.clubId]
+);
+
+if (r.rowCount === 0) {
+  return res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+}
+
+return res.json({ ok: true });
+} catch (e) {
+  console.error('[players delete] error', e);
+  return res.status(500).json({ error: 'Error del servidor' });
+}
 });
 
 /**
@@ -1703,6 +1910,7 @@ app.post(
   '/api/players/:id/photo',
   authRequired,
   requireAdminOrStaff,
+  requireClubContext,
   uploadPlayerPhoto.single('file'),
   async (req, res) => {
     if (!requireDB(res)) return;
@@ -1717,12 +1925,16 @@ app.post(
   const publicUrl = `/api/players/${id}/photo`;
   const now = Date.now();
 
-  await db.query(
-    `UPDATE public.players
-     SET photo_url=$1, updated_at=$2
-     WHERE id=$3`,
-    [publicUrl, now, id]
-  );
+  const r = await db.query(
+  `UPDATE public.players
+   SET photo_url=$1, updated_at=$2
+   WHERE id=$3 AND club_id=$4`,
+  [publicUrl, now, id, req.clubId]
+);
+
+if (r.rowCount === 0) {
+  return res.status(404).json({ error: 'No encontrado (otro club o inexistente)' });
+}
 
  return res.json({ ok: true, photo_url: publicUrl });
 } catch (e) {

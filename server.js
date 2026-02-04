@@ -287,7 +287,7 @@ async function upsertTournamentToDb(tournament) {
   if (!name) throw new Error('Tournament.name vacío: no se puede persistir');
 
   // en tu UI usás "format"; en tabla existe "type"
-  const type = String(tournament.type ?? tournament.format ?? 't').trim() || 't';
+  const type = 't'; // o el valor permitido que viste en la constraint
 
   const active = (typeof tournament.active === 'boolean') ? tournament.active : true;
 

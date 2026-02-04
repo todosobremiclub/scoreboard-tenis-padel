@@ -283,19 +283,17 @@ async function upsertTournamentToDb(tournament) {
   const createdAt = tournament.created_at ?? now;
   const updatedAt = tournament.updated_at ?? now;
 
-  // columnas obligatorias / esperadas por tu tabla
   const name = String(tournament.name ?? '').trim();
   if (!name) throw new Error('Tournament.name vacío: no se puede persistir');
 
-  // "type" existe en tu tabla; lo mapeamos desde format o dejamos 't'
+  // en tu UI usás "format"; en tabla existe "type"
   const type = String(tournament.type ?? tournament.format ?? 't').trim() || 't';
 
-  // "active" existe en tu tabla; por defecto true
   const active = (typeof tournament.active === 'boolean') ? tournament.active : true;
 
   await db.query(
     `INSERT INTO public.tournaments (id, name, type, active, created_at, updated_at, data)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)
      ON CONFLICT (id) DO UPDATE SET
        name = EXCLUDED.name,
        type = EXCLUDED.type,
@@ -313,7 +311,7 @@ async function upsertTournamentToDb(tournament) {
     ]
   );
 }
-async function deleteTournamentFromDb(id) {
+  async function deleteTournamentFromDb(id) {
   if (!dbEnabled()) return;
   await db.query(`DELETE FROM public.tournaments WHERE id = $1`, [id]);
 }
@@ -321,23 +319,30 @@ async function deleteTournamentFromDb(id) {
 async function loadTournamentsFromDb() {
   if (!dbEnabled()) return;
   try {
-    const { rows } = await db.query(
-      SELECT id, name, type, active, created_at, updated_at, data
-FROM public.t
-    );
+    const { rows } = await db.query(`
+  SELECT id, name, type, active, created_at, updated_at, data
+  FROM public.tournaments
+`);
 
     tournaments.clear();
 
     for (const r of rows) {
       let t = r.data ?? {};
-      if (typeof t === 'string') {
-        try { t = JSON.parse(t); } catch { t = {}; }
-      }
-      t.id = r.id;
-      t.created_at = Number(r.created_at ?? Date.now());
-      t.updated_at = Number(r.updated_at ?? Date.now());
+if (typeof t === 'string') {
+  try { t = JSON.parse(t); } catch { t = {}; }
+}
 
-      tournaments.set(t.id, t);
+// preferimos las columnas reales de la tabla
+t.id = r.id;
+t.name = r.name ?? t.name;
+t.type = r.type ?? t.type;
+t.active = (typeof r.active === 'boolean') ? r.active : (t.active ?? true);
+
+t.created_at = Number(r.created_at ?? Date.now());
+t.updated_at = Number(r.updated_at ?? Date.now());
+
+tournaments.set(t.id, t);
+
 t.name = r.name ?? t.name;
 t.type = r.type ?? t.type;
 t.active = (typeof r.active === 'boolean') ? r.active : (t.active ?? true);
@@ -959,13 +964,18 @@ app.delete('/api/matches/:id', async (req, res) => {
     io.to(id).emit('deleted', { id });
 
    
-return res.json({ ok: true, photo_url: publicUrl });
-} catch (e) {
-  console.error('[players photo] error', e);
-  return res.status(500).json({ error: 'Error del servidor' });
-}
+return res.json({
+      ok: true,
+      deleted: { active: inActive, history: inHistory },
+      deleteAds,
+      db: dbEnabled(),
+    });
+  } catch (e) {
+    console.error('[matches delete] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
   }
-);
+});
+  
 
 
 // =========================================================

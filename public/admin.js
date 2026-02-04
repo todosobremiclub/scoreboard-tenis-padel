@@ -1445,4 +1445,11 @@ async function apiDeleteAd(matchId, url){
 }
 
 // Go!
-bootstrap();
+// Go! (espera a que admin-auth habilite la sesión)
+window.addEventListener('admin:ready', async () => {
+  if (window.__adminBootstrapped) return;
+  window.__adminBootstrapped = true;
+
+  await bootstrap();
+  await initClubSwitcher();
+});

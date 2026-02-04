@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 
 import bcrypt from 'bcrypt';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import pg from 'pg';
@@ -28,10 +29,20 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.set('trust proxy', 1);
 
-app.use(express.json());
-app.use(cookieParser(process.env.COOKIE_SECRET || 'dev-secret'));
-app.use(express.static('public'));
+// JSON body (con límite)
+app.use(express.json({ limit: '1mb' }));
 
+// Cookies firmadas
+app.use(cookieParser(process.env.COOKIE_SECRET || 'dev-secret'));
+
+// CORS
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+
+// Static
+app.use(express.static('public'));
 app.get('/', (_req, res) => res.redirect('/admin.html'));
 
 const PORT = process.env.PORT ?? 3000;
@@ -1182,13 +1193,13 @@ async function issueSession(res, user, req) {
   );
 
   res.cookie(SESSION_COOKIE, rawToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: daysToMs(SESSION_TTL_DAYS),
-    signed: true,
-  });
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',
+  path: '/',
+  maxAge: daysToMs(SESSION_TTL_DAYS),
+  signed: true,
+});
 
   await db.query('UPDATE users SET last_login_at=$1, updated_at=$1 WHERE id=$2', [createdAt, user.id]);
   return { token: rawToken, expiresAt };
@@ -1341,12 +1352,12 @@ app.post('/api/auth/logout', async (req, res) => {
       await db.query('DELETE FROM user_sessions WHERE token_hash=$1', [tokenHash]);
     }
 
-    res.clearCookie(SESSION_COOKIE, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
-      path: '/',
-    });
+   res.clearCookie(SESSION_COOKIE, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',
+  path: '/',
+});
 
     return res.json({ ok: true });
   } catch (e) {

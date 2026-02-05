@@ -2065,24 +2065,25 @@ app.post('/api/players', authRequired, requireAdminOrStaff, requireClubContext, 
 
     // ✅ SIEMPRE public.players
     const sql = `
-  INSERT INTO public.players
-    (id, club_id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at)
-  VALUES
-    ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9,$9)
-  RETURNING id
+ INSERT INTO public.players
+ (id, club_id, first_name, last_name, dni, phone, birthdate, age, category, active, created_at, updated_at)
+ VALUES
+ ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10,$10)
+ RETURNING id
 `;
     const params = [
-  id,
-  req.clubId,
-  fn,
-  ln,
-  (dni || null),
-  (phone || null),
-  bms,
-  age,
-  (cat || null),
-  now
+  id,                 // $1
+  req.clubId,         // $2
+  fn,                 // $3
+  ln,                 // $4
+  (dni || null),      // $5
+  (phone || null),    // $6
+  bms,                // $7
+  age,                // $8
+  (cat || null),      // $9
+  now                 // $10
 ];
+
 
     const { rows } = await db.query(sql, params);
     return res.status(201).json({ id: rows[0]?.id });

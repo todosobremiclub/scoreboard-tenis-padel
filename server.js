@@ -1446,6 +1446,123 @@ app.get('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, re
 });
 
 // =========================================================
+// Super Admin - Clubs (CRUD)
+// =========================================================
+
+// GET /api/superadmin/clubs?q=&limit=&offset=
+app.get('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const limit = Math.min(parseInt(req.query.limit ?? '50', 10), 200);
+    const offset = Math.max(parseInt(req.query.offset ?? '0', 10), 0);
+    const q = String(req.query.q ?? '').trim().toLowerCase();
+
+    const params = [];
+    let whereSql = '';
+    if (q) {
+      params.push(`%${q}%`);
+      whereSql = `WHERE lower(id) LIKE $1 OR lower(name) LIKE $1 OR lower(slug) LIKE $1`;
+    }
+
+    const sql = `
+      SELECT id, name, slug, active, created_at, updated_at
+      FROM public.clubs
+      ${whereSql}
+      ORDER BY created_at DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+    params.push(limit, offset);
+
+    const { rows } = await db.query(sql, params);
+    return res.json({ clubs: rows, limit, offset });
+  } catch (e) {
+    console.error('[superadmin clubs list] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// POST /api/superadmin/clubs
+// body: { id, name, slug, active? }
+app.post('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const id = String(req.body?.id ?? '').trim();
+    const name = String(req.body?.name ?? '').trim();
+    const slug = String(req.body?.slug ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-');
+
+    const active = (typeof req.body?.active === 'boolean') ? req.body.active : true;
+
+    if (!id || !name || !slug) {
+      return res.status(400).json({ error: 'id, name y slug son requeridos' });
+    }
+
+    const now = Date.now();
+    await db.query(
+      `INSERT INTO public.clubs (id, name, slug, active, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$5)`,
+      [id, name, slug, active, now]
+    );
+
+    return res.status(201).json({ ok: true, id });
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'ID o slug duplicado' });
+    }
+    console.error('[superadmin clubs create] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// PATCH /api/superadmin/clubs/:id
+// body: { name?, slug?, active? }
+app.patch('/api/superadmin/clubs/:id', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const id = String(req.params.id);
+    const fields = [];
+    const params = [];
+
+    if (typeof req.body?.name === 'string') {
+      fields.push(`name=$${fields.length + 1}`);
+      params.push(req.body.name.trim());
+    }
+    if (typeof req.body?.slug === 'string') {
+      fields.push(`slug=$${fields.length + 1}`);
+      params.push(
+        req.body.slug.trim().toLowerCase().replace(/\s+/g, '-')
+      );
+    }
+    if (typeof req.body?.active === 'boolean') {
+      fields.push(`active=$${fields.length + 1}`);
+      params.push(req.body.active);
+    }
+
+    if (!fields.length) return res.json({ ok: true });
+
+    fields.push(`updated_at=$${fields.length + 1}`);
+    params.push(Date.now());
+
+    params.push(id);
+    await db.query(
+      `UPDATE public.clubs SET ${fields.join(', ')} WHERE id=$${params.length}`,
+      params
+    );
+
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'Slug duplicado' });
+    }
+    console.error('[superadmin clubs patch] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+
+// =========================================================
 // Superadmin: iniciar impersonación de un club
 // =========================================================
 app.post('/api/superadmin/impersonate', authRequired, requireSuperAdmin, async (req, res) => {

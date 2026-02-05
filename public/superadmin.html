@@ -2,76 +2,234 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Super Admin | Scoreboard Tenis/Pádel</title>
+  <title>Super Admin — Scoreboard Tenis/Pádel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <style>
-    :root {
-      --bg: #0e1116;
-      --card: #151a21;
-      --muted: #8892a6;
+    :root{
+      --bg: #0b0f14;
+      --card: #121821;
+      --card2:#0f151d;
+      --muted: #8a97ab;
       --text: #e6edf3;
-      --primary: #2ea043;
-      --primary-2: #238636;
+      --primary: #1bbf63;     /* verde “pádel” */
+      --primary-2: #14a755;
       --danger: #d73a49;
       --accent: #3b82f6;
-      --border: #263241;
+      --border: #223045;
       --warn: #f59e0b;
+      --ball: #bde65e;        /* “pelota” */
+      --shadow: 0 18px 40px rgba(0,0,0,.40);
+      --radius: 14px;
     }
+
     *{box-sizing:border-box}
-    body {
-      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell;
-      background: var(--bg); color: var(--text);
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(27,191,99,.18), transparent 60%),
+        radial-gradient(900px 500px at 110% 10%, rgba(189,230,94,.12), transparent 55%),
+        radial-gradient(800px 600px at 40% 120%, rgba(59,130,246,.10), transparent 60%),
+        var(--bg);
+      color:var(--text);
     }
-    header {
-      display:flex; align-items:center; justify-content:space-between;
-      padding: 16px 20px; border-bottom:1px solid var(--border); background: #0c1016;
-      position: sticky; top: 0; z-index: 10;
+
+    /* ===== Header moderno ===== */
+    header.sa-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:16px 20px;
+      border-bottom:1px solid var(--border);
+      background: linear-gradient(180deg, rgba(18,24,33,.92), rgba(12,16,22,.92));
+      position: sticky;
+      top:0;
+      z-index:10;
+      backdrop-filter: blur(10px);
     }
-    header h1 { margin:0; font-size: 18px; font-weight: 600; }
-    header .right { display:flex; gap:8px; align-items:center; }
-    main { max-width: 1100px; margin: 0 auto; padding: 20px; }
-    .card { background: var(--card); border:1px solid var(--border); border-radius: 10px; padding: 16px; }
-    .grid { display:grid; gap: 12px; }
-    .row { display:flex; gap: 8px; align-items:center; flex-wrap:wrap; }
-    input, select {
-      background:#0e1520; color:var(--text); border:1px solid var(--border);
-      padding:8px 10px; border-radius:8px; outline:none;
+    .sa-title{
+      display:flex;
+      align-items:center;
+      gap:12px;
     }
-    input::placeholder { color: #9aa6bd; }
-    button {
-      border:1px solid var(--border); background:#101826; color:var(--text);
-      padding:8px 12px; border-radius:8px; cursor:pointer;
+    .sa-badge{
+      width:38px; height:38px;
+      border-radius:999px;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 45%),
+        radial-gradient(circle at 65% 60%, rgba(0,0,0,.25), transparent 60%),
+        linear-gradient(145deg, rgba(189,230,94,.95), rgba(27,191,99,.95));
+      box-shadow: 0 10px 24px rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.14);
     }
-    .btn-primary { background: var(--primary-2); border-color:#1f6f2e; }
-    .btn-danger  { background: #2a1113; color:#ffb4bc; border-color:#4b161c; }
-    .btn-warn    { background: #30240a; color:#ffd68c; border-color:#503a0c; }
-    .btn-accent  { background: #123061; border-color:#1e3a8a; color:#dbeafe; }
-    table { width:100%; border-collapse: collapse; }
-    th, td { border-bottom:1px solid var(--border); padding:10px; text-align:left; font-size:14px; }
-    th { color:#aab2bf; font-weight:600; }
-    tr:hover td { background:#10151d; }
-    .muted { color: var(--muted); }
-    .pill { padding:3px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); }
-    .pill.on { background:#0d1d12; color:#9af5b5; border-color:#1a3b23; }
-    .pill.off { background:#2b1a1a; color:#ffb0b7; border-color:#4a1f26; }
-    .hidden { display:none !important; }
-    .spacer { flex:1; }
-    .modal-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items:center; justify-content:center; z-index: 50;
+    header.sa-header h1{
+      margin:0;
+      font-size:18px;
+      font-weight:800;
+      letter-spacing:.2px;
     }
-    .modal { background: var(--card); border:1px solid var(--border); border-radius: 12px; padding:16px; width: 520px; max-width: 92vw; }
-    .modal h3 { margin-top:0 }
-    .modal .footer { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
-    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:12px; padding:2px 6px; border:1px solid var(--border); border-radius:6px; background:#0b1220; color:#bcd; }
-    .link { color:#9ecbff; text-decoration: none; }
-    .link:hover { text-decoration: underline; }
-    .error { color:#ff9aa5; }
-    .success { color:#9af5b5; }
+    header .right{display:flex; gap:10px; align-items:center;}
+
+    main{ max-width: 1180px; margin: 0 auto; padding: 20px; }
+
+    /* ===== Cards / layout ===== */
+    .card{
+      background: linear-gradient(180deg, rgba(18,24,33,.92), rgba(15,21,29,.92));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .grid{ display:grid; gap: 12px; }
+    .row{ display:flex; gap: 10px; align-items:center; flex-wrap:wrap; }
+    .spacer{ flex:1; }
+
+    input, select{
+      background: rgba(11,15,20,.85);
+      color: var(--text);
+      border: 1px solid rgba(34,48,69,.95);
+      padding: 10px 12px;
+      border-radius: 12px;
+      outline: none;
+      min-height: 40px;
+    }
+    input::placeholder{ color: #9aa6bd; }
+
+    button{
+      border:1px solid rgba(34,48,69,.95);
+      background: rgba(16,24,38,.85);
+      color: var(--text);
+      padding:10px 12px;
+      border-radius: 12px;
+      cursor:pointer;
+      font-weight:700;
+      transition: transform .08s ease, filter .12s ease;
+    }
+    button:hover{ filter: brightness(1.06); }
+    button:active{ transform: translateY(1px); }
+
+    .btn-primary{
+      background: linear-gradient(180deg, rgba(20,167,85,.95), rgba(17,134,72,.95));
+      border-color: rgba(31,111,46,.9);
+    }
+    .btn-danger{
+      background: rgba(42,17,19,.92);
+      color:#ffb4bc;
+      border-color: rgba(75,22,28,.9);
+    }
+    .btn-warn{
+      background: rgba(48,36,10,.92);
+      color:#ffd68c;
+      border-color: rgba(80,58,12,.9);
+    }
+    .btn-accent{
+      background: rgba(18,48,97,.92);
+      border-color: rgba(30,58,138,.9);
+      color:#dbeafe;
+    }
+
+    table{ width:100%; border-collapse: collapse; }
+    th, td{
+      border-bottom:1px solid rgba(34,48,69,.75);
+      padding:10px;
+      text-align:left;
+      font-size:14px;
+      vertical-align: top;
+    }
+    th{ color:#aab2bf; font-weight:800; font-size:12px; letter-spacing:.6px; text-transform:uppercase; }
+    tr:hover td{ background: rgba(16,21,29,.6); }
+
+    .muted{ color: var(--muted); }
+    .pill{
+      padding:4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid rgba(34,48,69,.9);
+      display:inline-flex;
+      gap:6px;
+      align-items:center;
+    }
+    .pill.on{
+      background: rgba(13,29,18,.92);
+      color:#9af5b5;
+      border-color: rgba(26,59,35,.9);
+    }
+    .pill.off{
+      background: rgba(43,26,26,.92);
+      color:#ffb0b7;
+      border-color: rgba(74,31,38,.9);
+    }
+    .hidden{ display:none !important; }
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size:12px;
+      padding:2px 6px;
+      border:1px solid rgba(34,48,69,.9);
+      border-radius:8px;
+      background: rgba(11,18,32,.9);
+      color:#bcd;
+    }
+    .error{ color:#ff9aa5; }
+    .success{ color:#9af5b5; }
+
+    /* ===== Modal ===== */
+    .modal-backdrop{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.62);
+      display: none;
+      align-items:center;
+      justify-content:center;
+      z-index: 50;
+      padding: 16px;
+    }
+    .modal{
+      background: linear-gradient(180deg, rgba(18,24,33,.98), rgba(15,21,29,.98));
+      border:1px solid rgba(34,48,69,.95);
+      border-radius: 16px;
+      padding:16px;
+      width: 560px;
+      max-width: 96vw;
+      box-shadow: var(--shadow);
+    }
+    .modal h3{ margin-top:0; }
+    .modal .footer{
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      margin-top:14px;
+    }
+
+    /* Pequeño toque “pádel” en títulos */
+    h2, h3{
+      letter-spacing:.2px;
+    }
+    .section-title{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .section-dot{
+      width:10px;height:10px;border-radius:50%;
+      background: var(--ball);
+      box-shadow: 0 0 0 2px rgba(0,0,0,.35), 0 0 10px rgba(189,230,94,.30);
+    }
   </style>
 </head>
+
 <body>
-  <header>
-    <h1>Consola de Súper Admin</h1>
+  <header class="sa-header">
+    <div class="sa-title">
+      <div class="sa-badge" aria-hidden="true"></div>
+      <div>
+        <h1>Superadmin — Gestión del Club</h1>
+        <div class="muted" style="font-size:12px; margin-top:2px;">
+          Usuarios, clubes y permisos (multi‑club)
+        </div>
+      </div>
+    </div>
+
     <div class="right">
       <span id="meBadge" class="muted">No autenticado</span>
       <button id="btnLogout" class="hidden">Cerrar sesión</button>
@@ -81,35 +239,50 @@
   <main>
     <!-- Login Card -->
     <section id="loginCard" class="card">
-      <h2 style="margin:0 0 8px 0;">Ingresá como Súper Admin</h2>
-      <div class="grid" style="grid-template-columns: 1fr 1fr auto; align-items:end;">
+      <div class="section-title">
+        <span class="section-dot"></span>
+        <h2 style="margin:0;">Ingresá como Súper Admin</h2>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 1fr 1fr auto; align-items:end; margin-top:12px;">
         <div class="grid">
           <label>Email</label>
           <input id="loginEmail" type="email" placeholder="superadmin@tuclub.com" autocomplete="username" />
         </div>
+
         <div class="grid">
           <label>Contraseña</label>
           <input id="loginPassword" type="password" placeholder="********" autocomplete="current-password" />
         </div>
+
         <div class="grid">
           <label>&nbsp;</label>
           <button id="btnLogin" class="btn-primary">Iniciar sesión</button>
         </div>
       </div>
-      <div id="loginMsg" class="muted" style="margin-top:8px;"></div>
+
+      <div id="loginMsg" class="muted" style="margin-top:10px;"></div>
     </section>
 
     <!-- Panel de usuarios -->
-    <section id="usersCard" class="card hidden">
+    <section id="usersCard" class="card hidden" style="margin-top:14px;">
       <div class="row">
-        <h2 style="margin:0;">Usuarios</h2>
+        <div class="section-title">
+          <span class="section-dot"></span>
+          <h2 style="margin:0;">Usuarios</h2>
+        </div>
+
         <div class="spacer"></div>
+
         <input id="q" type="search" placeholder="Buscar por nombre o email..." style="min-width:260px;">
         <button id="btnSearch" class="btn-accent">Buscar</button>
         <button id="btnNew" class="btn-primary">Nuevo usuario</button>
       </div>
 
-      <div class="muted" style="margin:8px 0">Solo visible para rol <span class="kbd">superadmin</span>. Los cambios impactan en quién puede entrar a <span class="kbd">admin.html</span>.</div>
+      <div class="muted" style="margin:10px 0">
+        Visible solo para rol <span class="kbd">superadmin</span>.
+        Los cambios impactan en quién puede entrar a <span class="kbd">admin.html</span>.
+      </div>
 
       <div style="overflow:auto; margin-top:8px;">
         <table id="tblUsers">
@@ -130,97 +303,67 @@
         </table>
       </div>
     </section>
-<!-- Panel de clubes -->
-<section id="clubsCard" class="card hidden" style="margin-top:14px;">
-  <div class="row">
-    <h2 style="margin:0;">Clubes</h2>
-    <div class="spacer"></div>
 
-    <input
-      id="club_q"
-      type="search"
-      placeholder="Buscar por id, nombre o slug..."
-      style="min-width:260px;"
-    />
-    <button id="btnClubSearch" class="btn-accent">Buscar</button>
-    <button id="btnClubNew" class="btn-primary">Nuevo club</button>
-  </div>
+    <!-- Panel de Clubes (ÚNICO - sin duplicado) -->
+    <section id="clubsCard" class="card hidden" style="margin-top:14px;">
+      <div class="row">
+        <div class="section-title">
+          <span class="section-dot"></span>
+          <h2 style="margin:0;">Clubes</h2>
+        </div>
 
-  <div class="muted" style="margin:8px 0">
-    Gestión de <span class="kbd">public.clubs</span> (solo visible para rol <span class="kbd">superadmin</span>).
-  </div>
+        <div class="spacer"></div>
 
-  <div style="overflow:auto; margin-top:8px;">
-    <table id="tblClubs">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Nombre</th>
-          <th>Slug</th>
-          <th>Estado</th>
-          <th style="width:240px;">Acciones</th>
-        </tr>
-      </thead>
-      <tbody id="tbodyClubs">
-        <tr><td colspan="5" class="muted">Sin datos…</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-<!-- Panel de clubes -->
-<section id="clubsCard" class="card hidden" style="margin-top:14px;">
-  <div class="row">
-    <h2 style="margin:0;">Clubes</h2>
-    <div class="spacer"></div>
+        <input
+          id="club_q"
+          type="search"
+          placeholder="Buscar por nombre, ciudad o provincia..."
+          style="min-width:260px;"
+        />
+        <button id="btnClubSearch" class="btn-accent">Buscar</button>
+        <button id="btnClubNew" class="btn-primary">Nuevo club</button>
+      </div>
 
-    <input
-      id="club_q"
-      type="search"
-      placeholder="Buscar por id, nombre o slug..."
-      style="min-width:260px;"
-    >
-    <button id="btnClubSearch" class="btn-accent">Buscar</button>
-    <button id="btnClubNew" class="btn-primary">Nuevo club</button>
-  </div>
+      <div class="muted" style="margin:10px 0">
+        Gestión de <span class="kbd">public.clubs</span> con datos de ubicación (dirección/ciudad/provincia).
+      </div>
 
-  <div class="muted" style="margin:8px 0">
-    Gestión de <span class="kbd">public.clubs</span> (solo visible para rol <span class="kbd">superadmin</span>).
-  </div>
-
-  <div style="overflow:auto; margin-top:8px;">
-    <table id="tblClubs">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Nombre</th>
-          <th>Slug</th>
-          <th>Estado</th>
-          <th style="width:240px;">Acciones</th>
-        </tr>
-      </thead>
-      <tbody id="tbodyClubs">
-        <tr><td colspan="5" class="muted">Sin datos…</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+      <div style="overflow:auto; margin-top:8px;">
+        <table id="tblClubs">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Dirección</th>
+              <th>Ciudad</th>
+              <th>Provincia</th>
+              <th>Estado</th>
+              <th style="width:240px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyClubs">
+            <tr><td colspan="6" class="muted">Sin datos…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
-
-
-  <!-- Modal Crear/Editar -->
+  <!-- Modal Crear/Editar Usuario (se mantiene) -->
   <div id="modalBackdrop" class="modal-backdrop">
     <div class="modal">
       <h3 id="modalTitle">Nuevo usuario</h3>
+
       <div class="grid" style="grid-template-columns: 1fr 1fr;">
         <div class="grid">
           <label>Nombre</label>
           <input id="f_name" type="text" placeholder="Nombre y apellido">
         </div>
+
         <div class="grid">
           <label>Email</label>
           <input id="f_email" type="email" placeholder="usuario@dominio.com">
         </div>
+
         <div class="grid">
           <label>Rol</label>
           <select id="f_role">
@@ -229,6 +372,7 @@
             <option value="superadmin">superadmin</option>
           </select>
         </div>
+
         <div class="grid">
           <label>Estado</label>
           <select id="f_active">
@@ -236,21 +380,23 @@
             <option value="false">Inactivo</option>
           </select>
         </div>
-        
-<div class="grid" style="grid-column:1/span 2;">
-  <label>Clubes (selección múltiple)</label>
-  <select id="f_clubs" multiple size="6"></select>
-  <div class="muted" style="font-size:12px;">
-    Usá Ctrl (Windows) / Cmd (Mac) para seleccionar varios.
-  </div>
-</div>
+
+        <div class="grid" style="grid-column:1/span 2;">
+          <label>Clubes (selección múltiple)</label>
+          <select id="f_clubs" multiple size="6"></select>
+          <div class="muted" style="font-size:12px;">
+            Usá Ctrl (Windows) / Cmd (Mac) para seleccionar varios.
+          </div>
+        </div>
 
         <div class="grid" style="grid-column:1/span 2;">
           <label>Contraseña <span class="muted">(dejar vacío para no cambiar)</span></label>
           <input id="f_password" type="password" placeholder="********">
         </div>
       </div>
-      <div id="modalMsg" class="muted" style="margin-top:8px;"></div>
+
+      <div id="modalMsg" class="muted" style="margin-top:10px;"></div>
+
       <div class="footer">
         <button id="btnCancel">Cancelar</button>
         <button id="btnSave" class="btn-primary">Guardar</button>
@@ -258,7 +404,42 @@
     </div>
   </div>
 
-  
-<script src="/superadmin.js"></script>
+  <!-- Modal Crear/Editar Club (NUEVO) -->
+  <div id="clubModalBackdrop" class="modal-backdrop">
+    <div class="modal" style="width:520px; max-width:92vw;">
+      <h3 id="clubModalTitle">Nuevo club</h3>
+
+      <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="grid" style="grid-column:1/span 2;">
+          <label>Nombre del club</label>
+          <input id="club_name" type="text" placeholder="Ej: Club Los Robles Pádel">
+        </div>
+
+        <div class="grid" style="grid-column:1/span 2;">
+          <label>Dirección</label>
+          <input id="club_address" type="text" placeholder="Dirección (calle y número)">
+        </div>
+
+        <div class="grid">
+          <label>Ciudad</label>
+          <input id="club_city" type="text" placeholder="Ciudad">
+        </div>
+
+        <div class="grid">
+          <label>Provincia</label>
+          <input id="club_province" type="text" placeholder="Provincia">
+        </div>
+      </div>
+
+      <div id="clubModalMsg" class="muted" style="margin-top:10px;"></div>
+
+      <div class="footer">
+        <button id="clubBtnCancel">Cancelar</button>
+        <button id="clubBtnSave" class="btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/superadmin.js"></script>
 </body>
 </html>

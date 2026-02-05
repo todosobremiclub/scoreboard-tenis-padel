@@ -1450,6 +1450,48 @@ app.get('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, re
 // =========================================================
 // Super Admin - Clubs (CRUD)
 // =========================================================
+// -------- Clubs helpers: slug + id automáticos --------
+function slugifyClubName(input) {
+  const s = String(input ?? '')
+    .trim()
+    .toLowerCase()
+    // quitar acentos
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    // reemplazar espacios/guiones bajos por -
+    .replace(/[\s_]+/g, '-')
+    // dejar solo a-z 0-9 y -
+    .replace(/[^a-z0-9-]/g, '')
+    // colapsar múltiples -
+    .replace(/-+/g, '-')
+    // trim -
+    .replace(/^-|-$/g, '');
+
+  return s || 'club';
+}
+
+function generateClubId() {
+  // Ej: club_a1b2c3d4 (8 chars)
+  const short = uuidv4().split('-')[0];
+  return `club_${short}`;
+}
+
+async function ensureUniqueClubSlug(baseSlug) {
+  // Busca un slug disponible: base, base-2, base-3, ...
+  let slug = baseSlug;
+  let n = 1;
+
+  while (true) {
+    const { rows } = await db.query(
+      `SELECT 1 FROM public.clubs WHERE slug=$1 LIMIT 1`,
+      [slug]
+    );
+    if (!rows.length) return slug;
+    n += 1;
+    slug = `${baseSlug}-${n}`;
+  }
+}
+// ------------------------------------------------------
 
 // GET /api/superadmin/clubs?q=&limit=&offset=
 app.get('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, res) => {
@@ -1463,16 +1505,24 @@ app.get('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, re
     let whereSql = '';
     if (q) {
       params.push(`%${q}%`);
-      whereSql = `WHERE lower(id) LIKE $1 OR lower(name) LIKE $1 OR lower(slug) LIKE $1`;
+whereSql = `
+  WHERE lower(id) LIKE $1
+     OR lower(name) LIKE $1
+     OR lower(slug) LIKE $1
+     OR lower(coalesce(address,'')) LIKE $1
+     OR lower(coalesce(city,'')) LIKE $1
+     OR lower(coalesce(province,'')) LIKE $1
+`;
     }
 
     const sql = `
-      SELECT id, name, slug, active, created_at, updated_at
-      FROM public.clubs
-      ${whereSql}
-      ORDER BY created_at DESC
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-    `;
+  SELECT id, name, slug, address, city, province, active, created_at, updated_at
+  FROM public.clubs
+  ${whereSql}
+  ORDER BY created_at DESC
+  LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+`;
+
     params.push(limit, offset);
 
     const { rows } = await db.query(sql, params);
@@ -1484,31 +1534,57 @@ app.get('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, re
 });
 
 // POST /api/superadmin/clubs
-// body: { id, name, slug, active? }
-app.post('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, res) => {
+// body: { name, address?, city?, province? }
+// id y slug se asignan automáticamenteapp.post('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
   try {
-    const id = String(req.body?.id ?? '').trim();
-    const name = String(req.body?.name ?? '').trim();
-    const slug = String(req.body?.slug ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '-');
+   const name = String(req.body?.name ?? '').trim();
+const address = String(req.body?.address ?? '').trim() || null;
+const city = String(req.body?.city ?? '').trim() || null;
+const province = String(req.body?.province ?? '').trim() || null;
 
-    const active = (typeof req.body?.active === 'boolean') ? req.body.active : true;
+// Para nuevo club, por defecto activo = true
+const active = (typeof req.body?.active === 'boolean') ? req.body.active : true;
 
-    if (!id || !name || !slug) {
-      return res.status(400).json({ error: 'id, name y slug son requeridos' });
-    }
+if (!name) {
+  return res.status(400).json({ error: 'name es requerido' });
+}
 
-    const now = Date.now();
+// Generación automática
+const baseSlug = slugifyClubName(name);
+
+// Intentamos varias veces por si choca id/slug (unique constraints)
+let lastErr = null;
+for (let attempt = 0; attempt < 6; attempt++) {
+  const id = generateClubId();
+  const slug = await ensureUniqueClubSlug(baseSlug);
+  const now = Date.now();
+
+  try {
     await db.query(
-      `INSERT INTO public.clubs (id, name, slug, active, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$5)`,
-      [id, name, slug, active, now]
+      `INSERT INTO public.clubs (id, name, slug, address, city, province, active, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)`,
+      [id, name, slug, address, city, province, active, now]
     );
 
-    return res.status(201).json({ ok: true, id });
+    return res.status(201).json({ ok: true, id, slug });
+  } catch (e) {
+    // 23505 = unique_violation
+    if (e.code === '23505') {
+      lastErr = e;
+      continue;
+    }
+    lastErr = e;
+    break;
+  }
+}
+
+if (lastErr?.code === '23505') {
+  return res.status(409).json({ error: 'No se pudo generar un ID/slug único, reintentar.' });
+}
+
+console.error('[superadmin clubs create] error', lastErr);
+return res.status(500).json({ error: 'Error del servidor' });
   } catch (e) {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'ID o slug duplicado' });
@@ -1519,9 +1595,10 @@ app.post('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, r
 });
 
 // PATCH /api/superadmin/clubs/:id
-// body: { name?, slug?, active? }
+// body: { name?, slug?, address?, city?, province?, active? }
 app.patch('/api/superadmin/clubs/:id', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
+
   try {
     const id = String(req.params.id);
     const fields = [];
@@ -1531,12 +1608,33 @@ app.patch('/api/superadmin/clubs/:id', authRequired, requireSuperAdmin, async (r
       fields.push(`name=$${fields.length + 1}`);
       params.push(req.body.name.trim());
     }
+
     if (typeof req.body?.slug === 'string') {
       fields.push(`slug=$${fields.length + 1}`);
       params.push(
         req.body.slug.trim().toLowerCase().replace(/\s+/g, '-')
       );
     }
+
+    // ✅ NUEVO: address / city / province
+    if (typeof req.body?.address === 'string') {
+      fields.push(`address=$${fields.length + 1}`);
+      const v = req.body.address.trim();
+      params.push(v || null);
+    }
+
+    if (typeof req.body?.city === 'string') {
+      fields.push(`city=$${fields.length + 1}`);
+      const v = req.body.city.trim();
+      params.push(v || null);
+    }
+
+    if (typeof req.body?.province === 'string') {
+      fields.push(`province=$${fields.length + 1}`);
+      const v = req.body.province.trim();
+      params.push(v || null);
+    }
+
     if (typeof req.body?.active === 'boolean') {
       fields.push(`active=$${fields.length + 1}`);
       params.push(req.body.active);
@@ -1548,6 +1646,7 @@ app.patch('/api/superadmin/clubs/:id', authRequired, requireSuperAdmin, async (r
     params.push(Date.now());
 
     params.push(id);
+
     await db.query(
       `UPDATE public.clubs SET ${fields.join(', ')} WHERE id=$${params.length}`,
       params

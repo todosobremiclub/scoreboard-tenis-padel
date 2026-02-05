@@ -1,136 +1,88 @@
-// superadmin.js
+// public/superadmin.js
+// Superadmin — Usuarios + Clubes (con modal de clubes y campos ubicación)
+// - Crea/edita clubes con: name, address, city, province
+// - El ID/slug se autoasignan en backend (lo implementamos en server.js luego)
 
 const el = (id) => document.getElementById(id);
+
 const state = {
   me: null,
-  editingId: null, // null => crear
+
+  // Users
+  editingId: null,     // user id o null
   q: '',
   limit: 50,
   offset: 0,
 
-// === Clubs panel ===
+  // Clubs panel
   clubs: {
     list: [],
     q: '',
     limit: 200,
-    offset: 0
+    offset: 0,
+    editingId: null,   // club id o null
   },
 
-
-  // Cache de clubes para el selector del modal (multi-select)
+  // Cache de clubes para selector multi-select de usuarios
   allClubs: [],
   allClubsLoaded: false,
 };
 
-
+// -----------------------
+// Utils
+// -----------------------
 function fmtDate(ms) {
   if (!ms) return '—';
   const d = new Date(Number(ms));
   return d.toLocaleString();
 }
+
 function setHidden(node, hidden) {
   if (!node) return;
   node.classList.toggle('hidden', !!hidden);
 }
+
 function toast(node, msg, type = 'muted') {
   if (!node) return;
-  node.textContent = msg;
+  node.textContent = msg || '';
   node.className = type; // 'muted' | 'error' | 'success'
 }
 
-// ----------- Clubs (helpers para selector multi) -----------
-
-async function fetchAllClubsForModal() {
-  // Traemos hasta 200 clubes (si necesitás más, lo ajustamos luego)
-  const params = new URLSearchParams();
-  params.set('limit', '200');
-  params.set('offset', '0');
-
-  const r = await fetch(`/api/superadmin/clubs?${params}`, { credentials: 'include' });
-  if (!r.ok) {
-    const data = await r.json().catch(() => ({}));
-    throw new Error(data?.error || `No se pudo cargar clubes (${r.status})`);
-  }
-  const data = await r.json();
-  return data.clubs ?? [];
+function escHtml(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
-function setClubsSelectOptions(clubs, selectedIds = []) {
-  const sel = el('f_clubs');
-  if (!sel) return;
-
-  const selectedSet = new Set((selectedIds ?? []).map(String));
-
-  sel.innerHTML = '';
-  for (const c of clubs) {
-    const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.textContent = c.slug ? `${c.name} (${c.slug})` : c.name;
-    if (selectedSet.has(String(c.id))) opt.selected = true;
-    sel.appendChild(opt);
-  }
+function pill(active) {
+  return active
+    ? `<span class="pill on">Activo</span>`
+    : `<span class="pill off">Inactivo</span>`;
 }
 
-function getSelectedClubIdsFromSelect() {
-  const sel = el('f_clubs');
-  if (!sel) return [];
-  return Array.from(sel.selectedOptions).map(o => String(o.value));
-}
-
-async function fetchUserClubsActive(userId) {
-  const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs`, {
-    credentials: 'include'
-  });
-  if (!r.ok) return [];
-  const data = await r.json().catch(() => ({}));
-  return data.clubs ?? [];
-}
-
-async function prepareClubsSelectForUser(userIdOrNull) {
-  // 1) Asegurar cache de clubes
-  if (!state.allClubsLoaded) {
-    state.allClubs = await fetchAllClubsForModal();
-    state.allClubsLoaded = true;
-  }
-
-  // 2) Si es “nuevo usuario”, no preseleccionamos nada
-  if (!userIdOrNull) {
-    setClubsSelectOptions(state.allClubs, []);
-    return;
-  }
-
-  // 3) Si es edición, preseleccionar clubes activos del usuario
-  const assigned = await fetchUserClubsActive(userIdOrNull);
-  const selectedIds = assigned.map(c => c.id);
-  setClubsSelectOptions(state.allClubs, selectedIds);
-}
-
-async function setUserClubs(userId, clubIds) {
-  const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ clubIds })
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.error || `Error set clubs (${r.status})`);
-  return data;
-}
-
-// ----------- Auth -----------
+// -----------------------
+// Auth
+// -----------------------
 async function fetchMe() {
   try {
     const r = await fetch('/api/auth/me', { credentials: 'include' });
     if (!r.ok) return null;
     const { user } = await r.json();
     return user;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 async function doLogin() {
-  const email = el('loginEmail').value.trim();
-  const password = el('loginPassword').value;
+  const email = el('loginEmail')?.value?.trim() ?? '';
+  const password = el('loginPassword')?.value ?? '';
+
   toast(el('loginMsg'), 'Autenticando…', 'muted');
+
   try {
     const r = await fetch('/api/auth/login', {
       method: 'POST',
@@ -138,13 +90,15 @@ async function doLogin() {
       credentials: 'include',
       body: JSON.stringify({ email, password }),
     });
+
     if (!r.ok) {
-      const { error } = await r.json().catch(() => ({ error: 'Error' }));
-      toast(el('loginMsg'), error || 'Credenciales inválidas', 'error');
+      const data = await r.json().catch(() => ({}));
+      toast(el('loginMsg'), data?.error || 'Credenciales inválidas', 'error');
       return;
     }
-    const data = await r.json();
-    state.me = data.user;
+
+    const data = await r.json().catch(() => ({}));
+    state.me = data.user ?? null;
     await enterApp();
   } catch (e) {
     toast(el('loginMsg'), 'No se pudo conectar al servidor', 'error');
@@ -159,56 +113,104 @@ async function doLogout() {
 }
 
 async function enterApp() {
-  const me = state.me || (await fetchMe());
+  const me = state.me ?? (await fetchMe());
   if (!me) {
     setHidden(el('usersCard'), true);
+    setHidden(el('clubsCard'), true);
     setHidden(el('loginCard'), false);
     el('meBadge').textContent = 'No autenticado';
     setHidden(el('btnLogout'), true);
     return;
   }
+
   el('meBadge').textContent = `${me.name || me.email} (${me.role})`;
   setHidden(el('btnLogout'), false);
 
   if (me.role !== 'superadmin') {
     setHidden(el('loginCard'), true);
     setHidden(el('usersCard'), true);
+    setHidden(el('clubsCard'), true);
     toast(el('loginMsg'), 'Necesitás rol superadmin para acceder a esta consola.', 'error');
     return;
   }
 
   setHidden(el('loginCard'), true);
-setHidden(el('usersCard'), false);
-setHidden(el('clubsCard'), false);
-await loadUsers();
-await loadClubs();
+  setHidden(el('usersCard'), false);
+  setHidden(el('clubsCard'), false);
+
+  await loadClubs();  // primero clubs (sirve para selector del modal usuarios)
+  await loadUsers();
 }
 
-// ----------- Clubs -----------
-async function loadClubs() {
+// -----------------------
+// Clubs — API
+// -----------------------
+async function fetchClubs({ q = '', limit = 200, offset = 0 } = {}) {
   const params = new URLSearchParams();
-  if (state.clubs.q) params.set('q', state.clubs.q);
-  params.set('limit', String(state.clubs.limit));
-  params.set('offset', String(state.clubs.offset));
+  if (q) params.set('q', q);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
 
-  const url = `/api/superadmin/clubs?${params}`;
+  const r = await fetch(`/api/superadmin/clubs?${params.toString()}`, { credentials: 'include' });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || `No se pudo cargar clubes (${r.status})`);
+  return data.clubs ?? [];
+}
+
+async function createClub(payload) {
+  // Backend deberá autoasignar id + slug. Nosotros mandamos solo datos requeridos.
+  const r = await fetch('/api/superadmin/clubs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || `No se pudo crear club (${r.status})`);
+  return data;
+}
+
+async function updateClub(clubId, payload) {
+  const r = await fetch(`/api/superadmin/clubs/${encodeURIComponent(clubId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || `No se pudo editar club (${r.status})`);
+  return data;
+}
+
+async function toggleClub(clubId, active) {
+  // Usamos PATCH para activar/desactivar
+  return updateClub(clubId, { active });
+}
+
+// -----------------------
+// Clubs — UI / render
+// -----------------------
+async function loadClubs() {
   const tbody = el('tbodyClubs');
-  if (!tbody) return;
-
-  tbody.innerHTML = `<tr><td class="muted" colspan="5">Cargando…</td></tr>`;
+  if (tbody) tbody.innerHTML = `<tr><td class="muted" colspan="6">Cargando…</td></tr>`;
 
   try {
-    const r = await fetch(url, { credentials: 'include' });
-    if (!r.ok) {
-      const { error } = await r.json().catch(() => ({ error: 'Error' }));
-      tbody.innerHTML = `<tr><td colspan="5" class="error">${error || 'Error'}</td></tr>`;
-      return;
-    }
-    const data = await r.json();
-    state.clubs.list = data.clubs || [];
-    renderClubs(state.clubs.list);
+    const clubs = await fetchClubs({
+      q: state.clubs.q,
+      limit: state.clubs.limit,
+      offset: state.clubs.offset,
+    });
+
+    state.clubs.list = clubs;
+    renderClubs(clubs);
+
+    // cache para selector del modal usuarios (multi-select)
+    state.allClubs = clubs;
+    state.allClubsLoaded = true;
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="error">No se pudo cargar</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="error">${escHtml(e.message || 'Error')}</td></tr>`;
   }
 }
 
@@ -216,291 +218,325 @@ function renderClubs(clubs) {
   const tbody = el('tbodyClubs');
   if (!tbody) return;
 
-  if (!clubs.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">Sin clubes.</td></tr>`;
+  if (!clubs?.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">Sin clubes.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = clubs.map(c => {
-    const activePill = c.active
-      ? `<span class="pill on">Activo</span>`
-      : `<span class="pill off">Inactivo</span>`;
+  tbody.innerHTML = clubs.map((c) => {
+    const name = escHtml(c.name || '—');
+    const address = escHtml(c.address || '—');
+    const city = escHtml(c.city || '—');
+    const prov = escHtml(c.province || '—');
 
     return `
-      <tr data-id="${c.id}">
-        <td>${c.id}</td>
-        <td>${c.name || '—'}</td>
-        <td>${c.slug || '—'}</td>
-        <td>${activePill}</td>
+      <tr data-id="${escHtml(c.id)}">
+        <td><strong>${name}</strong></td>
+        <td>${address}</td>
+        <td>${city}</td>
+        <td>${prov}</td>
+        <td>${pill(!!c.active)}</td>
         <td style="white-space:nowrap;">
-          <button data-club-edit="${c.id}">Editar</button>
-          <button class="btn-danger" data-club-toggle="${c.id}">${c.active ? 'Desactivar' : 'Activar'}</button>
+          <button data-club-edit="${escHtml(c.id)}">Editar</button>
+          <button class="btn-danger" data-club-toggle="${escHtml(c.id)}">
+            ${c.active ? 'Desactivar' : 'Activar'}
+          </button>
         </td>
       </tr>
     `;
   }).join('');
 
-  tbody.querySelectorAll('[data-club-edit]').forEach(b => b.addEventListener('click', onEditClub));
-  tbody.querySelectorAll('[data-club-toggle]').forEach(b => b.addEventListener('click', onToggleClub));
+  tbody.querySelectorAll('[data-club-edit]').forEach((b) => b.addEventListener('click', onEditClub));
+  tbody.querySelectorAll('[data-club-toggle]').forEach((b) => b.addEventListener('click', onToggleClub));
+}
+
+function openClubModal({ title = 'Nuevo club', club = null } = {}) {
+  state.clubs.editingId = club?.id ?? null;
+
+  el('clubModalTitle').textContent = title;
+  el('club_name').value = club?.name ?? '';
+  el('club_address').value = club?.address ?? '';
+  el('club_city').value = club?.city ?? '';
+  el('club_province').value = club?.province ?? '';
+
+  toast(el('clubModalMsg'), '', 'muted');
+  el('clubModalBackdrop').style.display = 'flex';
+}
+
+function closeClubModal() {
+  el('clubModalBackdrop').style.display = 'none';
+  state.clubs.editingId = null;
 }
 
 async function onNewClub() {
-  const id = prompt('ID del club (ej: club2):');
-  if (!id) return;
-
-  const name = prompt('Nombre del club:');
-  if (!name) return;
-
-  const defaultSlug = name.toLowerCase().trim().replace(/\s+/g, '-');
-  const slug = prompt('Slug (ej: mi-club):', defaultSlug);
-  if (!slug) return;
-
-  const r = await fetch('/api/superadmin/clubs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ id: id.trim(), name: name.trim(), slug: slug.trim(), active: true })
-  });
-
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) return alert(data.error || 'No se pudo crear');
-  await loadClubs();
+  openClubModal({ title: 'Nuevo club', club: null });
 }
 
 async function onEditClub(ev) {
   const id = ev.currentTarget.getAttribute('data-club-edit');
-  const c = state.clubs.list.find(x => String(x.id) === String(id));
-  if (!c) return;
+  const club = state.clubs.list.find((x) => String(x.id) === String(id));
+  if (!club) return;
 
-  const name = prompt('Nuevo nombre:', c.name || '');
-  if (name == null) return;
-
-  const slug = prompt('Nuevo slug:', c.slug || '');
-  if (slug == null) return;
-
-  const r = await fetch(`/api/superadmin/clubs/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ name: name.trim(), slug: slug.trim() })
+  openClubModal({
+    title: `Editar club`,
+    club,
   });
-
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) return alert(data.error || 'No se pudo editar');
-  await loadClubs();
 }
 
 async function onToggleClub(ev) {
   const id = ev.currentTarget.getAttribute('data-club-toggle');
-  const c = state.clubs.list.find(x => String(x.id) === String(id));
-  if (!c) return;
+  const club = state.clubs.list.find((x) => String(x.id) === String(id));
+  if (!club) return;
 
-  const next = !c.active;
-  const ok = confirm(`${next ? 'Activar' : 'Desactivar'} el club ${id}?`);
+  const next = !club.active;
+  const ok = confirm(`${next ? 'Activar' : 'Desactivar'} el club "${club.name}"?`);
   if (!ok) return;
 
-  const r = await fetch(`/api/superadmin/clubs/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ active: next })
-  });
-
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) return alert(data.error || 'No se pudo actualizar');
-  await loadClubs();
+  try {
+    await toggleClub(id, next);
+    await loadClubs();
+  } catch (e) {
+    alert(e.message || 'No se pudo actualizar el club');
+  }
 }
 
-// ----------- Users -----------
+function validateClubForm() {
+  const name = el('club_name')?.value?.trim() ?? '';
+  if (!name) return { ok: false, error: 'El nombre del club es requerido.' };
+
+  // address/city/province son opcionales, pero recomendados
+  return { ok: true };
+}
+
+async function onSaveClub() {
+  const v = validateClubForm();
+  if (!v.ok) {
+    toast(el('clubModalMsg'), v.error, 'error');
+    return;
+  }
+
+  const payload = {
+    name: el('club_name').value.trim(),
+    address: el('club_address').value.trim(),
+    city: el('club_city').value.trim(),
+    province: el('club_province').value.trim(),
+  };
+
+  const btn = el('clubBtnSave');
+  btn.disabled = true;
+  toast(el('clubModalMsg'), 'Guardando…', 'muted');
+
+  try {
+    if (!state.clubs.editingId) {
+      await createClub(payload);
+    } else {
+      await updateClub(state.clubs.editingId, payload);
+    }
+
+    toast(el('clubModalMsg'), 'Guardado', 'success');
+    closeClubModal();
+    await loadClubs();
+
+    // refresca selector del modal de usuarios (clubes)
+    state.allClubs = state.clubs.list;
+    state.allClubsLoaded = true;
+  } catch (e) {
+    toast(el('clubModalMsg'), e.message || 'No se pudo guardar', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// -----------------------
+// Users — Clubs selector helpers
+// -----------------------
+function setClubsSelectOptions(clubs, selectedIds = []) {
+  const sel = el('f_clubs');
+  if (!sel) return;
+
+  const selectedSet = new Set((selectedIds ?? []).map(String));
+  sel.innerHTML = '';
+
+  for (const c of clubs) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.name || c.id;
+    if (selectedSet.has(String(c.id))) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function getSelectedClubIdsFromSelect() {
+  const sel = el('f_clubs');
+  if (!sel) return [];
+  return Array.from(sel.selectedOptions).map((o) => String(o.value));
+}
+
+async function fetchAllClubsForModal() {
+  // Para el multi-select de clubes en el modal usuarios
+  // Si ya están cargados en state.allClubs, lo usamos.
+  if (state.allClubsLoaded && state.allClubs.length) return state.allClubs;
+
+  const clubs = await fetchClubs({ q: '', limit: 500, offset: 0 });
+  state.allClubs = clubs;
+  state.allClubsLoaded = true;
+  return clubs;
+}
+
+async function fetchUserClubsActive(userId) {
+  const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs`, {
+    credentials: 'include',
+  });
+  if (!r.ok) return [];
+  const data = await r.json().catch(() => ({}));
+  return data.clubs ?? [];
+}
+
+async function setUserClubs(userId, clubIds) {
+  const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ clubIds }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || `Error set clubs (${r.status})`);
+  return data;
+}
+
+async function prepareClubsSelectForUser(userIdOrNull) {
+  const clubs = await fetchAllClubsForModal();
+  if (!userIdOrNull) {
+    setClubsSelectOptions(clubs, []);
+    return;
+  }
+  const assigned = await fetchUserClubsActive(userIdOrNull);
+  const selectedIds = assigned.map((c) => c.id);
+  setClubsSelectOptions(clubs, selectedIds);
+}
+
+// -----------------------
+// Users — API
+// -----------------------
 async function loadUsers() {
   const params = new URLSearchParams();
   if (state.q) params.set('q', state.q);
   params.set('limit', String(state.limit));
   params.set('offset', String(state.offset));
-  const url = `/api/superadmin/users?${params}`;
 
   const tbody = el('tbodyUsers');
-  tbody.innerHTML = `<tr><td class="muted" colspan="7">Cargando…</td></tr>`;
+  if (tbody) tbody.innerHTML = `<tr><td class="muted" colspan="7">Cargando…</td></tr>`;
+
   try {
-    const r = await fetch(url, { credentials: 'include' });
+    const r = await fetch(`/api/superadmin/users?${params.toString()}`, { credentials: 'include' });
     if (!r.ok) {
-      if (r.status === 401) {
-        toast(el('loginMsg'), 'Sesión vencida. Volvé a iniciar sesión.', 'error');
-        setHidden(el('usersCard'), true);
-        setHidden(el('loginCard'), false);
-        return;
-      }
-      if (r.status === 403) {
-        tbody.innerHTML = `<tr><td colspan="7" class="error">No autorizado.</td></tr>`;
-        return;
-      }
-      const { error } = await r.json().catch(()=>({error:'Error'}));
-      tbody.innerHTML = `<tr><td colspan="7" class="error">${error || 'Error'}</td></tr>`;
-      return;
+      const data = await r.json().catch(() => ({}));
+      if (r.status === 401) throw new Error('Sesión vencida. Volvé a iniciar sesión.');
+      if (r.status === 403) throw new Error('No autorizado.');
+      throw new Error(data?.error || 'Error al cargar usuarios');
     }
-    const data = await r.json();
-    renderUsers(data.users || []);
+    const data = await r.json().catch(() => ({}));
+    renderUsers(data.users ?? []);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="error">No se pudo cargar</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td class="error" colspan="7">${escHtml(e.message || 'Error')}</td></tr>`;
   }
 }
 
 function renderUsers(users) {
   const tbody = el('tbodyUsers');
+  if (!tbody) return;
+
   if (!users.length) {
     tbody.innerHTML = `<tr><td class="muted" colspan="7">Sin usuarios.</td></tr>`;
     return;
   }
-  tbody.innerHTML = users.map(u => {
+
+  tbody.innerHTML = users.map((u) => {
     const active = u.active ? `<span class="pill on">Activo</span>` : `<span class="pill off">Inactivo</span>`;
     return `
       <tr>
-        <td>${u.id}</td>
-        <td>${u.name || '—'}</td>
-        <td>${u.email}</td>
-        <td><span class="kbd">${u.role}</span></td>
+        <td>${escHtml(u.id)}</td>
+        <td>${escHtml(u.name || '—')}</td>
+        <td>${escHtml(u.email || '')}</td>
+        <td><span class="kbd">${escHtml(u.role || '')}</span></td>
         <td>${active}</td>
-        <td class="muted">${fmtDate(u.last_login_at)}</td>
-        <td>
-          <button data-edit="${u.id}">Editar</button>
-          <button class="btn-warn" data-reset="${u.id}">Reset clave</button>
-          <button data-clubs="${u.id}">Clubes</button>
-          <button class="btn-danger" data-del="${u.id}">${u.active ? 'Desactivar' : 'Desactivado'}</button>
+        <td class="muted">${escHtml(fmtDate(u.last_login_at))}</td>
+        <td style="white-space:nowrap;">
+          <button data-edit="${escHtml(u.id)}">Editar</button>
+          <button class="btn-warn" data-reset="${escHtml(u.id)}">Reset clave</button>
+          <button class="btn-danger" data-del="${escHtml(u.id)}">${u.active ? 'Desactivar' : 'Desactivado'}</button>
         </td>
       </tr>
     `;
   }).join('');
-  // wire actions
-  tbody.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', onEdit));
-  tbody.querySelectorAll('[data-reset]').forEach(btn => btn.addEventListener('click', onResetPwd));
-  tbody.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', onDeactivate));
-tbody.querySelectorAll('[data-clubs]').forEach(btn => btn.addEventListener('click', onManageUserClubs));
+
+  tbody.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', onEditUserFromRow));
+  tbody.querySelectorAll('[data-reset]').forEach((btn) => btn.addEventListener('click', onResetPwd));
+  tbody.querySelectorAll('[data-del]').forEach((btn) => btn.addEventListener('click', onDeactivateUser));
 }
 
-// ----------- User Clubs (asignación de clubes) -----------
-
-async function fetchUserClubs(userId) {
-  try {
-    const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs`, {
-      credentials: 'include'
-    });
-    if (!r.ok) return [];
-    const data = await r.json().catch(() => ({}));
-    return data.clubs ?? [];
-  } catch {
-    return [];
-  }
-}
-
-async function assignClubToUser(userId, clubId) {
-  const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ clubId })
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.error || `Error ${r.status}`);
-  return data;
-}
-
-async function deactivateUserClub(userId, clubId) {
-  const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs/${encodeURIComponent(clubId)}/deactivate`, {
-    method: 'PATCH',
-    credentials: 'include'
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.error || `Error ${r.status}`);
-  return data;
-}
-
-async function onManageUserClubs(ev) {
-  const userId = ev.currentTarget.getAttribute('data-clubs');
-  if (!userId) return;
-
-  // 1) Traer clubes asignados actuales
-  const current = await fetchUserClubs(userId);
-  const listTxt = current.length
-    ? current.map(c => `- ${c.id} (${c.name || '—'})`).join('\n')
-    : '(sin clubes asignados)';
-
-  // 2) Mostrar opciones básicas
-  const action = prompt(
-    `Clubes del usuario ${userId}:\n\n${listTxt}\n\n` +
-    `Escribí:\n` +
-    `  A = Asignar club\n` +
-    `  D = Desasignar (active=false)\n` +
-    `  (Cancelar para salir)\n\n` +
-    `Acción:`
-  );
-
-  if (!action) return;
-
-  const act = action.trim().toUpperCase();
-  if (act === 'A') {
-    const clubId = prompt('ID del club a asignar (ej: club1):');
-    if (!clubId) return;
-    try {
-      await assignClubToUser(userId, clubId.trim());
-      alert(`OK: asignado club ${clubId} a ${userId}`);
-    } catch (e) {
-      alert(`No se pudo asignar: ${e.message}`);
-    }
-    return;
-  }
-
-  if (act === 'D') {
-    const clubId = prompt('ID del club a desasignar (active=false):');
-    if (!clubId) return;
-    try {
-      await deactivateUserClub(userId, clubId.trim());
-      alert(`OK: desasignado club ${clubId} (active=false)`);
-    } catch (e) {
-      alert(`No se pudo desasignar: ${e.message}`);
-    }
-    return;
-  }
-
-  alert('Acción inválida');
-}
-
-// ----------- Modal -----------
-function openModal({ title, user } = {}) {
+// -----------------------
+// Users — Modal (mejorado)
+// -----------------------
+function openUserModal({ title, user } = {}) {
   state.editingId = user?.id ?? null;
+
   el('modalTitle').textContent = title || (state.editingId ? 'Editar usuario' : 'Nuevo usuario');
   el('f_name').value = user?.name ?? '';
   el('f_email').value = user?.email ?? '';
   el('f_role').value = user?.role ?? 'admin';
   el('f_active').value = String(user?.active ?? true);
   el('f_password').value = '';
+
   toast(el('modalMsg'), '', 'muted');
   el('modalBackdrop').style.display = 'flex';
-// Cargar selector de clubes (multi) y preseleccionar si es edición
-  prepareClubsSelectForUser(state.editingId).catch((e) => {
-    console.error('[clubs select]', e);
-  });
-}
-function closeModal() {
-  el('modalBackdrop').style.display = 'none';
-}
-async function onEdit(e) {
- const id = String(e.currentTarget.getAttribute('data-edit'));
-  // Buscamos el usuario desde la tabla renderizada (simplificamos)
-  const row = e.currentTarget.closest('tr').children;
-  const user = {
-    id,
-    name: row[1].textContent === '—' ? '' : row[1].textContent,
-    email: row[2].textContent,
-    role: row[3].innerText.trim(),
-    active: row[4].innerText.includes('Activo'),
-  };
-  openModal({ title: 'Editar usuario', user });
-}
-function onNew() {
-  openModal({ title: 'Nuevo usuario' });
+
+  // Clubes multi-select: precargar y preseleccionar si es edición
+  prepareClubsSelectForUser(state.editingId).catch((e) => console.error('[clubs select]', e));
 }
 
-async function onSave() {
+function closeUserModal() {
+  el('modalBackdrop').style.display = 'none';
+  state.editingId = null;
+}
+
+function validateUserForm(payload, pwd) {
+  if (!payload.name) return { ok: false, error: 'El nombre es requerido.' };
+  if (!payload.email) return { ok: false, error: 'El email es requerido.' };
+  if (!payload.email.includes('@')) return { ok: false, error: 'El email no parece válido.' };
+
+  if (!state.editingId && !pwd) {
+    return { ok: false, error: 'Para crear un usuario, la contraseña es requerida.' };
+  }
+  if (pwd && pwd.length < 6) {
+    return { ok: false, error: 'La contraseña debe tener al menos 6 caracteres.' };
+  }
+  return { ok: true };
+}
+
+async function onEditUserFromRow(e) {
+  const id = String(e.currentTarget.getAttribute('data-edit'));
+  const row = e.currentTarget.closest('tr')?.children;
+  if (!row) return;
+
+  const roleTxt = row[3]?.innerText?.trim() ?? 'admin';
+  const role = roleTxt.replace(/\s+/g, '').toLowerCase(); // "admin" etc.
+  const user = {
+    id,
+    name: row[1]?.textContent === '—' ? '' : row[1]?.textContent,
+    email: row[2]?.textContent,
+    role,
+    active: row[4]?.innerText?.includes('Activo'),
+  };
+
+  openUserModal({ title: 'Editar usuario', user });
+}
+
+function onNewUser() {
+  openUserModal({ title: 'Nuevo usuario', user: null });
+}
+
+async function onSaveUser() {
   const payload = {
     name: el('f_name').value.trim(),
     email: el('f_email').value.trim().toLowerCase(),
@@ -508,14 +544,22 @@ async function onSave() {
     active: el('f_active').value === 'true',
   };
   const pwd = el('f_password').value;
+
+  const v = validateUserForm(payload, pwd);
+  if (!v.ok) {
+    toast(el('modalMsg'), v.error, 'error');
+    return;
+  }
+
   if (pwd) payload.password = pwd;
 
   const isEdit = !!state.editingId;
-  const url = isEdit ? `/api/superadmin/users/${state.editingId}` : `/api/superadmin/users`;
+  const url = isEdit ? `/api/superadmin/users/${encodeURIComponent(state.editingId)}` : `/api/superadmin/users`;
   const method = isEdit ? 'PATCH' : 'POST';
 
   el('btnSave').disabled = true;
   toast(el('modalMsg'), 'Guardando…', 'muted');
+
   try {
     const r = await fetch(url, {
       method,
@@ -523,41 +567,30 @@ async function onSave() {
       credentials: 'include',
       body: JSON.stringify(payload),
     });
+
+    const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const { error } = await r.json().catch(()=>({error:'Error'}));
-      toast(el('modalMsg'), error || 'Error al guardar', 'error');
+      toast(el('modalMsg'), data?.error || 'Error al guardar', 'error');
       el('btnSave').disabled = false;
       return;
     }
-    const data = await r.json().catch(() => ({}));
 
-  // Determinar el userId (si edito: state.editingId, si creo: data.user.id)
-  const userId = isEdit ? String(state.editingId) : String(data?.user?.id ?? '');
-  if (!userId) {
-    toast(el('modalMsg'), 'Guardado, pero no se obtuvo el ID del usuario', 'warn');
-    closeModal();
+    // Determinar userId (si creo, viene en data.user.id)
+    const userId = isEdit ? String(state.editingId) : String(data?.user?.id ?? '');
+    if (userId) {
+      const selectedClubIds = getSelectedClubIdsFromSelect();
+      // Regla existente: solo admin tiene clubes (staff/superadmin no)
+      const finalClubIds = (payload.role === 'admin') ? selectedClubIds : [];
+      try {
+        await setUserClubs(userId, finalClubIds);
+      } catch (e) {
+        toast(el('modalMsg'), `Usuario guardado, pero clubes fallaron: ${e.message}`, 'error');
+      }
+    }
+
+    toast(el('modalMsg'), 'Guardado', 'success');
+    closeUserModal();
     await loadUsers();
-    return;
-  }
-
-  // Tomar selección de clubes del multi-select
-  const selectedClubIds = getSelectedClubIdsFromSelect();
-
-  // Regla pedida: solo admin tiene clubes. Si no es admin -> vaciamos (desasigna todo = active=false)
-  const finalClubIds = (payload.role === 'admin') ? selectedClubIds : [];
-
-  try {
-    await setUserClubs(userId, finalClubIds);
-  } catch (e) {
-    // No bloqueamos el guardado del usuario, pero informamos
-    toast(el('modalMsg'), `Usuario guardado, pero clubes fallaron: ${e.message}`, 'error');
-    // NO return: dejamos que cierre/recargue igual
-  }
-
-  toast(el('modalMsg'), 'Guardado', 'success');
-  closeModal();
-  await loadUsers();
-  await loadClubs?.(); // si existe
   } catch (e) {
     toast(el('modalMsg'), 'No se pudo guardar', 'error');
   } finally {
@@ -566,19 +599,21 @@ async function onSave() {
 }
 
 async function onResetPwd(e) {
-const id = String(e.currentTarget.getAttribute('data-reset'));  
-const newPwd = prompt('Nueva contraseña para el usuario ID ' + id + ':');
+  const id = String(e.currentTarget.getAttribute('data-reset'));
+  const newPwd = prompt('Nueva contraseña para el usuario ID ' + id + ':');
   if (!newPwd) return;
+
   try {
-    const r = await fetch(`/api/superadmin/users/${id}`, {
+    const r = await fetch(`/api/superadmin/users/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ password: newPwd }),
     });
+
+    const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const { error } = await r.json().catch(()=>({error:'Error'}));
-      alert('No se pudo resetear: ' + (error || 'Error'));
+      alert('No se pudo resetear: ' + (data?.error || 'Error'));
       return;
     }
     alert('Contraseña actualizada');
@@ -587,17 +622,19 @@ const newPwd = prompt('Nueva contraseña para el usuario ID ' + id + ':');
   }
 }
 
-async function onDeactivate(e) {
-const id = String(e.currentTarget.getAttribute('data-del')); 
- if (!confirm('¿Desactivar usuario ' + id + '?')) return;
+async function onDeactivateUser(e) {
+  const id = String(e.currentTarget.getAttribute('data-del'));
+  if (!confirm('¿Desactivar usuario ' + id + '?')) return;
+
   try {
-    const r = await fetch(`/api/superadmin/users/${id}`, {
+    const r = await fetch(`/api/superadmin/users/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       credentials: 'include',
     });
+
+    const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const { error } = await r.json().catch(()=>({error:'Error'}));
-      alert('No se pudo desactivar: ' + (error || 'Error'));
+      alert('No se pudo desactivar: ' + (data?.error || 'Error'));
       return;
     }
     await loadUsers();
@@ -606,37 +643,48 @@ const id = String(e.currentTarget.getAttribute('data-del'));
   }
 }
 
-// ----------- Events -----------
+// -----------------------
+// Bind events
+// -----------------------
 window.addEventListener('DOMContentLoaded', async () => {
-  // Botones
-  el('btnLogin').addEventListener('click', doLogin);
-  el('btnLogout').addEventListener('click', doLogout);
-  el('btnSearch').addEventListener('click', () => {
-    state.q = el('q').value.trim();
+  // Login
+  el('btnLogin')?.addEventListener('click', doLogin);
+  el('btnLogout')?.addEventListener('click', doLogout);
+  el('loginPassword')?.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') doLogin(); });
+  el('loginEmail')?.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') doLogin(); });
+
+  // Users
+  el('btnSearch')?.addEventListener('click', () => {
+    state.q = el('q')?.value?.trim() ?? '';
     state.offset = 0;
     loadUsers();
   });
-  el('btnNew').addEventListener('click', onNew);
-  el('btnCancel').addEventListener('click', closeModal);
-  el('btnSave').addEventListener('click', onSave);
+  el('btnNew')?.addEventListener('click', onNewUser);
+  el('btnCancel')?.addEventListener('click', closeUserModal);
+  el('btnSave')?.addEventListener('click', onSaveUser);
 
-  // Enter en login
-  el('loginPassword').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') doLogin(); });
-  el('loginEmail').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') doLogin(); });
-
-// === Clubs UI ===
+  // Clubs
   el('btnClubSearch')?.addEventListener('click', () => {
     state.clubs.q = el('club_q')?.value?.trim() ?? '';
     state.clubs.offset = 0;
     loadClubs();
   });
-
-  el('btnClubNew')?.addEventListener('click', onNewClub);
-
   el('club_q')?.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') el('btnClubSearch')?.click();
   });
+  el('btnClubNew')?.addEventListener('click', onNewClub);
 
+  // Club modal
+  el('clubBtnCancel')?.addEventListener('click', closeClubModal);
+  el('clubBtnSave')?.addEventListener('click', onSaveClub);
+
+  // Cerrar modales clic fuera
+  el('modalBackdrop')?.addEventListener('click', (ev) => {
+    if (ev.target === el('modalBackdrop')) closeUserModal();
+  });
+  el('clubModalBackdrop')?.addEventListener('click', (ev) => {
+    if (ev.target === el('clubModalBackdrop')) closeClubModal();
+  });
 
   // Arranque
   await enterApp();

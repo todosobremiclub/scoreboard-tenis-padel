@@ -167,6 +167,43 @@
     </table>
   </div>
 </section>
+<!-- Panel de clubes -->
+<section id="clubsCard" class="card hidden" style="margin-top:14px;">
+  <div class="row">
+    <h2 style="margin:0;">Clubes</h2>
+    <div class="spacer"></div>
+
+    <input
+      id="club_q"
+      type="search"
+      placeholder="Buscar por id, nombre o slug..."
+      style="min-width:260px;"
+    >
+    <button id="btnClubSearch" class="btn-accent">Buscar</button>
+    <button id="btnClubNew" class="btn-primary">Nuevo club</button>
+  </div>
+
+  <div class="muted" style="margin:8px 0">
+    Gestión de <span class="kbd">public.clubs</span> (solo visible para rol <span class="kbd">superadmin</span>).
+  </div>
+
+  <div style="overflow:auto; margin-top:8px;">
+    <table id="tblClubs">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Slug</th>
+          <th>Estado</th>
+          <th style="width:240px;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tbodyClubs">
+        <tr><td colspan="5" class="muted">Sin datos…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
   </main>
 
 

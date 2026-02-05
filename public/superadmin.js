@@ -8,6 +8,15 @@ const state = {
   limit: 50,
   offset: 0,
 
+// === Clubs panel ===
+  clubs: {
+    list: [],
+    q: '',
+    limit: 200,
+    offset: 0
+  },
+
+
   // Cache de clubes para el selector del modal (multi-select)
   allClubs: [],
   allClubsLoaded: false,

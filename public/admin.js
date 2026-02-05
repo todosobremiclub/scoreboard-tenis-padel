@@ -1319,17 +1319,14 @@ document.getElementById('pl_showInactive')?.addEventListener('change', (ev) => {
 
 
 async function bootstrap(){
-  bindUI();
-  await loadStages();
-  await refreshLists();
-  setTab('active');
-  ensureSocket();
-  startTicker();
-
-  // Cargar jugadores si la pestaña actual es players (no lo es por defecto)
-  // pero si querés precargar la data, descomentá la siguiente línea:
-  // await loadPlayers();
+ bindUI();
+ await loadStages();
+ // await refreshLists();
+ setTab('active');
+ ensureSocket();
+ startTicker();
 }
+
 
 /* =========================================================
  Ads modal helpers
@@ -1450,6 +1447,7 @@ window.addEventListener('admin:ready', async () => {
   if (window.__adminBootstrapped) return;
   window.__adminBootstrapped = true;
 
-  await bootstrap();
   await initClubSwitcher();
+ await bootstrap();
+ await refreshLists();
 });

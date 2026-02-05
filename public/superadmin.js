@@ -8,17 +8,11 @@ const state = {
   limit: 50,
   offset: 0,
 
-// === Clubs ===
-  clubs: {
-    list: [],
-    q: '',
-    limit: 50,
-    offset: 0
-// Cache de clubes para el selector del modal (multi-select)
+  // Cache de clubes para el selector del modal (multi-select)
   allClubs: [],
   allClubsLoaded: false,
-  },
 };
+
 
 function fmtDate(ms) {
   if (!ms) return '—';

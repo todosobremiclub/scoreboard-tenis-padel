@@ -1669,6 +1669,67 @@ app.patch('/api/superadmin/users/:id/clubs/:clubId/deactivate', authRequired, re
   }
 });
 
+// PUT /api/superadmin/users/:id/clubs
+// body: { clubIds: ["club1","club2", ...] }
+// Regla: role fijo = 'admin' | Desasignar = active=false
+app.put('/api/superadmin/users/:id/clubs', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const userId = String(req.params.id ?? '').trim();
+    const clubIds = Array.isArray(req.body?.clubIds) ? req.body.clubIds.map(x => String(x).trim()).filter(Boolean) : [];
+
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+
+    // Validar que todos los clubes existan y estén activos
+    if (clubIds.length) {
+      const { rows } = await db.query(
+        `SELECT id FROM public.clubs WHERE active=true AND id = ANY($1::text[])`,
+        [clubIds]
+      );
+      const found = new Set(rows.map(r => r.id));
+      const missing = clubIds.filter(id => !found.has(id));
+      if (missing.length) {
+        return res.status(404).json({ error: `Club/es no encontrado/s o inactivo/s: ${missing.join(', ')}` });
+      }
+    }
+
+    const now = Date.now();
+
+    // 1) Desactivar todo lo que NO esté en la lista
+    // (si clubIds está vacío => desactiva todos)
+    await db.query(
+      `
+      UPDATE public.user_clubs
+      SET active=false, updated_at=$1
+      WHERE user_id=$2
+        AND active=true
+        AND ( $3::text[] IS NULL OR club_id <> ALL($3::text[]) )
+      `,
+      [now, userId, clubIds.length ? clubIds : null]
+    );
+
+    // 2) Upsert/activar los seleccionados con role='admin'
+    for (const clubId of clubIds) {
+      await db.query(
+        `
+        INSERT INTO public.user_clubs (user_id, club_id, role, active, created_at, updated_at)
+        VALUES ($1, $2, 'admin', true, $3, $3)
+        ON CONFLICT (user_id, club_id)
+        DO UPDATE SET
+          role='admin',
+          active=true,
+          updated_at=EXCLUDED.updated_at
+        `,
+        [userId, clubId, now]
+      );
+    }
+
+    return res.json({ ok: true, userId, clubIds });
+  } catch (e) {
+    console.error('[superadmin user_clubs set] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
 
 // =========================================================
 // Superadmin: iniciar impersonación de un club

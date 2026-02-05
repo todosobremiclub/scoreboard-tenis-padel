@@ -7,6 +7,14 @@ const state = {
   q: '',
   limit: 50,
   offset: 0,
+
+// === Clubs ===
+  clubs: {
+    list: [],
+    q: '',
+    limit: 50,
+    offset: 0
+  },
 };
 
 function fmtDate(ms) {
@@ -85,8 +93,137 @@ async function enterApp() {
   }
 
   setHidden(el('loginCard'), true);
-  setHidden(el('usersCard'), false);
-  await loadUsers();
+setHidden(el('usersCard'), false);
+setHidden(el('clubsCard'), false);
+await loadUsers();
+await loadClubs();
+}
+
+// ----------- Clubs -----------
+async function loadClubs() {
+  const params = new URLSearchParams();
+  if (state.clubs.q) params.set('q', state.clubs.q);
+  params.set('limit', String(state.clubs.limit));
+  params.set('offset', String(state.clubs.offset));
+
+  const url = `/api/superadmin/clubs?${params}`;
+  const tbody = el('tbodyClubs');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td class="muted" colspan="5">Cargando…</td></tr>`;
+
+  try {
+    const r = await fetch(url, { credentials: 'include' });
+    if (!r.ok) {
+      const { error } = await r.json().catch(() => ({ error: 'Error' }));
+      tbody.innerHTML = `<tr><td colspan="5" class="error">${error || 'Error'}</td></tr>`;
+      return;
+    }
+    const data = await r.json();
+    state.clubs.list = data.clubs || [];
+    renderClubs(state.clubs.list);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="error">No se pudo cargar</td></tr>`;
+  }
+}
+
+function renderClubs(clubs) {
+  const tbody = el('tbodyClubs');
+  if (!tbody) return;
+
+  if (!clubs.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">Sin clubes.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = clubs.map(c => {
+    const activePill = c.active
+      ? `<span class="pill on">Activo</span>`
+      : `<span class="pill off">Inactivo</span>`;
+
+    return `
+      <tr data-id="${c.id}">
+        <td>${c.id}</td>
+        <td>${c.name || '—'}</td>
+        <td>${c.slug || '—'}</td>
+        <td>${activePill}</td>
+        <td style="white-space:nowrap;">
+          <button data-club-edit="${c.id}">Editar</button>
+          <button class="btn-danger" data-club-toggle="${c.id}">${c.active ? 'Desactivar' : 'Activar'}</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('[data-club-edit]').forEach(b => b.addEventListener('click', onEditClub));
+  tbody.querySelectorAll('[data-club-toggle]').forEach(b => b.addEventListener('click', onToggleClub));
+}
+
+async function onNewClub() {
+  const id = prompt('ID del club (ej: club2):');
+  if (!id) return;
+
+  const name = prompt('Nombre del club:');
+  if (!name) return;
+
+  const defaultSlug = name.toLowerCase().trim().replace(/\s+/g, '-');
+  const slug = prompt('Slug (ej: mi-club):', defaultSlug);
+  if (!slug) return;
+
+  const r = await fetch('/api/superadmin/clubs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ id: id.trim(), name: name.trim(), slug: slug.trim(), active: true })
+  });
+
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return alert(data.error || 'No se pudo crear');
+  await loadClubs();
+}
+
+async function onEditClub(ev) {
+  const id = ev.currentTarget.getAttribute('data-club-edit');
+  const c = state.clubs.list.find(x => String(x.id) === String(id));
+  if (!c) return;
+
+  const name = prompt('Nuevo nombre:', c.name || '');
+  if (name == null) return;
+
+  const slug = prompt('Nuevo slug:', c.slug || '');
+  if (slug == null) return;
+
+  const r = await fetch(`/api/superadmin/clubs/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ name: name.trim(), slug: slug.trim() })
+  });
+
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return alert(data.error || 'No se pudo editar');
+  await loadClubs();
+}
+
+async function onToggleClub(ev) {
+  const id = ev.currentTarget.getAttribute('data-club-toggle');
+  const c = state.clubs.list.find(x => String(x.id) === String(id));
+  if (!c) return;
+
+  const next = !c.active;
+  const ok = confirm(`${next ? 'Activar' : 'Desactivar'} el club ${id}?`);
+  if (!ok) return;
+
+  const r = await fetch(`/api/superadmin/clubs/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ active: next })
+  });
+
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return alert(data.error || 'No se pudo actualizar');
+  await loadClubs();
 }
 
 // ----------- Users -----------
@@ -282,6 +419,20 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Enter en login
   el('loginPassword').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') doLogin(); });
   el('loginEmail').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') doLogin(); });
+
+// === Clubs UI ===
+  el('btnClubSearch')?.addEventListener('click', () => {
+    state.clubs.q = el('club_q')?.value?.trim() ?? '';
+    state.clubs.offset = 0;
+    loadClubs();
+  });
+
+  el('btnClubNew')?.addEventListener('click', onNewClub);
+
+  el('club_q')?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') el('btnClubSearch')?.click();
+  });
+
 
   // Arranque
   await enterApp();

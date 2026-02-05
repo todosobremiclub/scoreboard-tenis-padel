@@ -1535,7 +1535,8 @@ whereSql = `
 
 // POST /api/superadmin/clubs
 // body: { name, address?, city?, province? }
-// id y slug se asignan automáticamenteapp.post('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, res) => {
+// id y slug se asignan automáticamente
+app.post('/api/superadmin/clubs', authRequired, requireSuperAdmin, async (req, res) => {
   if (!requireDB(res)) return;
   try {
    const name = String(req.body?.name ?? '').trim();

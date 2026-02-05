@@ -279,6 +279,7 @@ function renderUsers(users) {
         <td>
           <button data-edit="${u.id}">Editar</button>
           <button class="btn-warn" data-reset="${u.id}">Reset clave</button>
+          <button data-clubs="${u.id}">Clubes</button>
           <button class="btn-danger" data-del="${u.id}">${u.active ? 'Desactivar' : 'Desactivado'}</button>
         </td>
       </tr>
@@ -288,6 +289,94 @@ function renderUsers(users) {
   tbody.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', onEdit));
   tbody.querySelectorAll('[data-reset]').forEach(btn => btn.addEventListener('click', onResetPwd));
   tbody.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', onDeactivate));
+tbody.querySelectorAll('[data-clubs]').forEach(btn => btn.addEventListener('click', onManageUserClubs));
+}
+
+// ----------- User Clubs (asignación de clubes) -----------
+
+async function fetchUserClubs(userId) {
+  try {
+    const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs`, {
+      credentials: 'include'
+    });
+    if (!r.ok) return [];
+    const data = await r.json().catch(() => ({}));
+    return data.clubs ?? [];
+  } catch {
+    return [];
+  }
+}
+
+async function assignClubToUser(userId, clubId) {
+  const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ clubId })
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || `Error ${r.status}`);
+  return data;
+}
+
+async function deactivateUserClub(userId, clubId) {
+  const r = await fetch(`/api/superadmin/users/${encodeURIComponent(userId)}/clubs/${encodeURIComponent(clubId)}/deactivate`, {
+    method: 'PATCH',
+    credentials: 'include'
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || `Error ${r.status}`);
+  return data;
+}
+
+async function onManageUserClubs(ev) {
+  const userId = ev.currentTarget.getAttribute('data-clubs');
+  if (!userId) return;
+
+  // 1) Traer clubes asignados actuales
+  const current = await fetchUserClubs(userId);
+  const listTxt = current.length
+    ? current.map(c => `- ${c.id} (${c.name || '—'})`).join('\n')
+    : '(sin clubes asignados)';
+
+  // 2) Mostrar opciones básicas
+  const action = prompt(
+    `Clubes del usuario ${userId}:\n\n${listTxt}\n\n` +
+    `Escribí:\n` +
+    `  A = Asignar club\n` +
+    `  D = Desasignar (active=false)\n` +
+    `  (Cancelar para salir)\n\n` +
+    `Acción:`
+  );
+
+  if (!action) return;
+
+  const act = action.trim().toUpperCase();
+  if (act === 'A') {
+    const clubId = prompt('ID del club a asignar (ej: club1):');
+    if (!clubId) return;
+    try {
+      await assignClubToUser(userId, clubId.trim());
+      alert(`OK: asignado club ${clubId} a ${userId}`);
+    } catch (e) {
+      alert(`No se pudo asignar: ${e.message}`);
+    }
+    return;
+  }
+
+  if (act === 'D') {
+    const clubId = prompt('ID del club a desasignar (active=false):');
+    if (!clubId) return;
+    try {
+      await deactivateUserClub(userId, clubId.trim());
+      alert(`OK: desasignado club ${clubId} (active=false)`);
+    } catch (e) {
+      alert(`No se pudo desasignar: ${e.message}`);
+    }
+    return;
+  }
+
+  alert('Acción inválida');
 }
 
 // ----------- Modal -----------

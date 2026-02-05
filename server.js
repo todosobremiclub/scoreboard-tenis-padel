@@ -1194,8 +1194,8 @@ async function issueSession(res, user, req) {
 
   res.cookie(SESSION_COOKIE, rawToken, {
   httpOnly: true,
-  secure: true,
-  sameSite: 'none',
+  secure: isProd,                      // <-- SOLO true en producción
+  sameSite: isProd ? 'none' : 'lax',   // <-- prod none, local lax
   path: '/',
   maxAge: daysToMs(SESSION_TTL_DAYS),
   signed: true,
@@ -1354,10 +1354,11 @@ app.post('/api/auth/logout', async (req, res) => {
 
    res.clearCookie(SESSION_COOKIE, {
   httpOnly: true,
-  secure: true,
-  sameSite: 'none',
+  secure: isProd,
+  sameSite: isProd ? 'none' : 'lax',
   path: '/',
 });
+
 
     return res.json({ ok: true });
   } catch (e) {

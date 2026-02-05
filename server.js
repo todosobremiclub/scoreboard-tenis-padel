@@ -1445,6 +1445,8 @@ app.get('/api/superadmin/users', authRequired, requireSuperAdmin, async (req, re
   }
 });
 
+
+
 // =========================================================
 // Super Admin - Clubs (CRUD)
 // =========================================================
@@ -1557,6 +1559,112 @@ app.patch('/api/superadmin/clubs/:id', authRequired, requireSuperAdmin, async (r
       return res.status(409).json({ error: 'Slug duplicado' });
     }
     console.error('[superadmin clubs patch] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// =========================================================
+// Super Admin - User Clubs (asignación clubes a usuarios)
+// Solo role "admin"; desasignación = active=false
+// =========================================================
+
+// GET /api/superadmin/users/:id/clubs
+app.get('/api/superadmin/users/:id/clubs', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const userId = String(req.params.id).trim();
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+
+    const { rows } = await db.query(
+      `
+      SELECT
+        uc.club_id AS id,
+        c.name,
+        c.slug,
+        uc.role,
+        uc.active
+      FROM public.user_clubs uc
+      JOIN public.clubs c ON c.id = uc.club_id
+      WHERE uc.user_id = $1
+        AND uc.active = true
+        AND c.active = true
+      ORDER BY c.name ASC
+      `,
+      [userId]
+    );
+
+    return res.json({ clubs: rows });
+  } catch (e) {
+    console.error('[superadmin user_clubs list] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// POST /api/superadmin/users/:id/clubs
+// body: { clubId }
+app.post('/api/superadmin/users/:id/clubs', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const userId = String(req.params.id).trim();
+    const clubId = String(req.body?.clubId ?? '').trim();
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    if (!clubId) return res.status(400).json({ error: 'clubId requerido' });
+
+    const chkClub = await db.query(
+      `SELECT id FROM public.clubs WHERE id = $1 AND active = true LIMIT 1`,
+      [clubId]
+    );
+    if (!chkClub.rows[0]) return res.status(404).json({ error: 'Club no encontrado o inactivo' });
+
+    const now = Date.now();
+
+    await db.query(
+      `
+      INSERT INTO public.user_clubs (user_id, club_id, role, active, created_at, updated_at)
+      VALUES ($1, $2, 'admin', true, $3, $3)
+      ON CONFLICT (user_id, club_id)
+      DO UPDATE SET
+        role = 'admin',
+        active = true,
+        updated_at = EXCLUDED.updated_at
+      `,
+      [userId, clubId, now]
+    );
+
+    return res.status(201).json({ ok: true, userId, clubId, role: 'admin', active: true });
+  } catch (e) {
+    console.error('[superadmin user_clubs assign] error', e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// PATCH /api/superadmin/users/:id/clubs/:clubId/deactivate
+app.patch('/api/superadmin/users/:id/clubs/:clubId/deactivate', authRequired, requireSuperAdmin, async (req, res) => {
+  if (!requireDB(res)) return;
+  try {
+    const userId = String(req.params.id).trim();
+    const clubId = String(req.params.clubId).trim();
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    if (!clubId) return res.status(400).json({ error: 'clubId requerido' });
+
+    const now = Date.now();
+
+    const r = await db.query(
+      `
+      UPDATE public.user_clubs
+      SET active = false, updated_at = $1
+      WHERE user_id = $2 AND club_id = $3 AND active = true
+      `,
+      [now, userId, clubId]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Relación no encontrada o ya inactiva' });
+    }
+
+    return res.json({ ok: true, userId, clubId, active: false });
+  } catch (e) {
+    console.error('[superadmin user_clubs deactivate] error', e);
     return res.status(500).json({ error: 'Error del servidor' });
   }
 });
